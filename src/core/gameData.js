@@ -1,0 +1,67 @@
+export const GAME_DATA = {
+  elements: [
+    { id: 'fire', name: 'Fire', nameColor: '#FF4500', accentColor: '#FF6347', epithet: 'The Burning' },
+    { id: 'water', name: 'Water', nameColor: '#1E90FF', accentColor: '#00BFFF', epithet: 'The Flowing' },
+    { id: 'air', name: 'Air', nameColor: '#87CEEB', accentColor: '#B0E0E6', epithet: 'The Wandering' },
+    { id: 'earth', name: 'Earth', nameColor: '#8B4513', accentColor: '#A0826D', epithet: 'The Grounded' },
+    { id: 'lightning', name: 'Lightning', nameColor: '#FFD700', accentColor: '#FFFF00', epithet: 'The Swift' },
+    { id: 'ice', name: 'Ice', nameColor: '#00CED1', accentColor: '#40E0D0', epithet: 'The Freezing' },
+    { id: 'nature', name: 'Nature', nameColor: '#228B22', accentColor: '#32CD32', epithet: 'The Growing' },
+    { id: 'light', name: 'Light', nameColor: '#FFFACD', accentColor: '#FFFFE0', epithet: 'The Radiant' }
+  ],
+  abilities: [
+    // ── TUNING ZONE ──────────────────────────────────────────────────────────
+    // baseDamage      : raw damage per hit
+    // manaCost        : mana spent per cast (0 = free)
+    // cooldown        : seconds between casts
+    //
+    // SLASH abilities (basicAttack style):
+    //   slash       : true → medio-óvalo instantáneo frente al jugador
+    //   slashDepth  : extensión hacia delante (px)
+    //   slashWidth  : ancho perpendicular del óvalo (px)
+    //   slashLife   : segundos que dura la animación
+    //
+    // PROJECTILE abilities (fireball style):
+    //   projectile      : true → proyectil que viaja
+    //   projectileSpeed : px/s
+    //   projectileRadius: radio colisión/dibujo (px)
+    //   projectileLife  : segundos antes de expirar
+    //   projectileColor : color del proyectil y float
+    //   burnDuration    : segundos que dura el burn al impactar
+    //   burnDps         : daño por tick (cada 0.4 s)
+    // ─────────────────────────────────────────────────────────────────────────
+    {
+      id: 'basicAttack',  name: 'Basic Attack',  element: null,
+      baseDamage: 14,     manaCost: 0,           cooldown: 0.25,
+      slash: true,        slashDepth: 72,        slashWidth: 52,  slashLife: 0.15
+    },
+    {
+      id: 'fireball',       name: 'Fireball',       element: 'fire',
+      baseDamage: 22,       manaCost: 8,            cooldown: 0.4,
+      projectile: true,     projectileSpeed: 420,   projectileRadius: 7,
+      projectileLife: 1.8,  projectileColor: '#FF5500',
+      burnDuration: 3.0,    burnDps: 4
+    },
+    {
+      id: 'waterbolt',    name: 'Water Bolt',    element: 'water',
+      baseDamage: 18,     manaCost: 12,          cooldown: 0.8,    range: 140
+    },
+    {
+      id: 'airslash',     name: 'Air Slash',     element: 'air',
+      baseDamage: 22,     manaCost: 18,          cooldown: 1.2,    range: 130
+    },
+  ],
+  materials: [
+    { id: 'wood', name: 'Wood', rarity: 'common', color: '#8B4513' },
+    { id: 'stone', name: 'Stone', rarity: 'common', color: '#808080' },
+    { id: 'metal', name: 'Metal', rarity: 'uncommon', color: '#C0C0C0' },
+    { id: 'crystal', name: 'Crystal', rarity: 'rare', color: '#FF00FF' }
+  ],
+  enemyTypes: [
+    { id: 'goblin', name: 'Goblin', baseHp: 15, baseDamage: 3, speed: 80, size: 15, color: '#228B22' },
+    { id: 'orc', name: 'Orc', baseHp: 30, baseDamage: 6, speed: 60, size: 20, color: '#8B0000' },
+    { id: 'skeleton', name: 'Skeleton', baseHp: 20, baseDamage: 4, speed: 70, size: 16, color: '#FFFFFF' }
+  ]
+};
+
+export default GAME_DATA;
