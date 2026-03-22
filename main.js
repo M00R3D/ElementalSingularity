@@ -15,7 +15,7 @@ const input = {
   right: false,
   mouseX: 0,
   mouseY: 0,
-  mouseDown: false
+  primaryHeld: false
 };
 
 const elementSystem = new ElementSystem(GAME_DATA);
@@ -32,19 +32,28 @@ function resizeCanvas() {
 
 function quickEquip(payload) {
   gameState.equipHotbar(gameState.hotbarIndex, payload);
-  uiManager.renderHotbar();
-  uiManager.renderMenu();
+  uiManager.renderHotbar(combatSystem);
+  uiManager.renderMenu(combatSystem);
 }
 
 function syncUi() {
-  uiManager.renderAbilityLibrary(quickEquip);
-  uiManager.renderElementLibrary(quickEquip);
-  uiManager.renderHotbar();
-  uiManager.renderMenu();
+  uiManager.renderAbilityLibrary(combatSystem, quickEquip);
+  uiManager.renderElementLibrary();
+  uiManager.renderHotbar(combatSystem);
+  uiManager.renderMenu(combatSystem);
   uiManager.renderSpawners(entityManager);
+  uiManager.renderDeathSummary();
+}
+
+function restartRun() {
+  elementSystem.resetRun();
+  gameState.reset();
+  entityManager.resetWorld();
+  syncUi();
 }
 
 function setupInput() {
+  const slotKeyMap = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
   window.addEventListener('keydown', (event) => {
     const key = event.key.toLowerCase();
     if (key === 'w' || key === 'arrowup') input.up = true;
@@ -57,12 +66,16 @@ function setupInput() {
     if (event.key === 'Tab') {
       event.preventDefault();
       gameState.toggleMenu();
-      uiManager.renderMenu();
+      uiManager.renderMenu(combatSystem);
     }
-    if (key >= '1' && key <= '9') {
-      gameState.setHotbarIndex(Number(key) - 1);
-      uiManager.renderHotbar();
-      uiManager.renderMenu();
+    const mappedIndex = slotKeyMap.indexOf(key);
+    if (mappedIndex >= 0) {
+      gameState.setHotbarIndex(mappedIndex);
+      uiManager.renderHotbar(combatSystem);
+      uiManager.renderMenu(combatSystem);
+    }
+    if (gameState.isDead && key === 'r') {
+      restartRun();
     }
   });
 
@@ -78,16 +91,19 @@ function setupInput() {
     input.mouseX = event.clientX;
     input.mouseY = event.clientY;
   });
-  canvas.addEventListener('mousedown', () => {
-    input.mouseDown = true;
+  canvas.addEventListener('mousedown', (event) => {
+    if (event.button === 0) input.primaryHeld = true;
   });
-  window.addEventListener('mouseup', () => {
-    input.mouseDown = false;
+  window.addEventListener('mouseup', (event) => {
+    if (event.button === 0) input.primaryHeld = false;
+  });
+  canvas.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
   });
   window.addEventListener('wheel', (event) => {
     gameState.scrollHotbar(event.deltaY > 0 ? 1 : -1);
-    uiManager.renderHotbar();
-    uiManager.renderMenu();
+    uiManager.renderHotbar(combatSystem);
+    uiManager.renderMenu(combatSystem);
   }, { passive: true });
 }
 
@@ -95,24 +111,36 @@ function bootstrap() {
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
   setupInput();
-  uiManager.bind(entityManager.player);
+  uiManager.bind(entityManager.player, restartRun);
   syncUi();
 }
 
+let elementGainTimer = 0;
 function update(dt) {
   gameState.time += dt;
   gameState.updateResources(dt);
   gameState.updateNotifications(dt);
+  gameState.updateCooldowns(dt);
 
-  if (Math.random() < dt * 0.14) {
+  elementGainTimer += dt;
+  if (elementGainTimer >= 8) {
+    elementGainTimer = 0;
     const gained = elementSystem.awardRandomElement();
-    gameState.notify(`Element Resonance: ${GAME_DATA.elements[gained].name}`, GAME_DATA.elements[gained].color, 1.6);
-    uiManager.renderElementLibrary(quickEquip);
+    const gainedElement = gained ? GAME_DATA.elements[gained] : null;
+    if (gainedElement) {
+      gameState.notify(`Element Resonance: ${gainedElement.name}`, gainedElement.color, 1.6);
+    }
+    gameState.recomputeBuildState();
+    uiManager.renderElementLibrary();
+    uiManager.renderAbilityLibrary(combatSystem, quickEquip);
   }
 
   combatSystem.tryPlayerAttack(input);
   entityManager.update(dt, input, combatSystem);
   uiManager.renderSpawners(entityManager);
+  if (gameState.isDead) {
+    uiManager.renderDeathSummary();
+  }
 }
 
 function draw() {
@@ -124,9 +152,11 @@ let lastFrame = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - lastFrame) / 1000);
   lastFrame = now;
-
-  if (!gameState.isPaused) {
+  if (!gameState.isPaused && !gameState.isDead) {
     update(dt);
+  } else {
+    gameState.updateNotifications(dt);
+    gameState.updateResources(dt);
   }
   draw();
   requestAnimationFrame(frame);
