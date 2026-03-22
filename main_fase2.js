@@ -134,6 +134,13 @@ canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
+
+  // Route clicks to inventory when open
+  if (inventoryUI.isOpen) {
+    inventoryUI.handleClick(clickX, clickY, canvas.width, canvas.height);
+    return;
+  }
+
   const worldPos = camera.toWorld(clickX, clickY);
   const worldX = worldPos.x;
   const worldY = worldPos.y;
@@ -195,6 +202,21 @@ canvas.addEventListener('click', (e) => {
         castTextTimer = 0.8;
         castHudFlash = 0.35;
         player.triggerCastFeedback(castColor);
+      }
+
+      // Feedback si el basic attack golpea cerca de un árbol
+      if (abilityId === 'basicAttack') {
+        const nearTree = worldMap.trees.find(t =>
+          t.state === 'alive' && Math.hypot(worldX - t.x, worldY - t.y) < t.radius + 18
+        );
+        if (nearTree) {
+          const hasAxe = (gameState.inventory.items['wooden_axe'] || 0) > 0 ||
+                         (gameState.inventory.items['stone_axe'] || 0) > 0;
+          gameState.notify(
+            hasAxe ? 'Right-click to harvest tree!' : 'Need an axe to fell trees!',
+            hasAxe ? '#FFFFAA' : '#FF9999', 0.9
+          );
+        }
       }
     } else {
       gameState.notify('No enemy targeted', '#FF9999', 0.7);

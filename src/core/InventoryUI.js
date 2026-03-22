@@ -154,8 +154,14 @@ export class InventoryUI {
 
   drawAbilitiesTab(ctx, x, y, w, h) {
     // Draw abilities list with scrolling
+    ctx.fillStyle = '#445566';
+    ctx.font = '9px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('Click an ability to select it, then go to Hotbar tab to assign:', x, y + 10);
     const abilities = this.gameData.abilities || [];
     const itemH = 28, padding = 4;
+    // Offset content to account for hint text
+    y += 16;
 
     ctx.save();
     ctx.beginPath();
@@ -193,11 +199,70 @@ export class InventoryUI {
     ctx.restore();
   }
 
+  // Maneja clicks dentro del panel de inventario.
+  handleClick(clickX, clickY, canvasW = 800, canvasH = 600) {
+    if (!this.isOpen) return false;
+
+    const panelW = 500, panelH = 450;
+    const px = Math.floor((canvasW - panelW) / 2);
+    const py = Math.floor((canvasH - panelH) / 2);
+
+    // Click fuera del panel — no hacer nada especial
+    if (clickX < px || clickX > px + panelW || clickY < py || clickY > py + panelH) return false;
+
+    // Clicks en tabs
+    const tabs = ['items', 'abilities', 'hotbar'];
+    const tabX = [px + 30, px + 150, px + 280];
+    const tabW = 100, tabH = 20;
+    for (let i = 0; i < tabs.length; i++) {
+      if (clickX >= tabX[i] && clickX <= tabX[i] + tabW &&
+          clickY >= py + 44 && clickY <= py + 44 + tabH) {
+        this.tab = tabs[i];
+        this.scrollPos = 0;
+        return true;
+      }
+    }
+
+    const contentX = px + 12;
+    const contentY = py + 75;
+    const contentW = panelW - 24;
+
+    if (this.tab === 'abilities') {
+      const abilities = this.gameData.abilities || [];
+      const itemH = 28, padding = 4;
+      // +16 matches the hint text offset applied in drawAbilitiesTab
+      let drawY = (contentY + 16) - this.scrollPos;
+      for (const ab of abilities) {
+        if (clickY >= drawY && clickY <= drawY + itemH &&
+            clickX >= contentX && clickX <= contentX + contentW) {
+          this.selectedAbility = ab.id;
+          return true;
+        }
+        drawY += itemH + padding;
+      }
+    } else if (this.tab === 'hotbar') {
+      const slotH = 40, slotW = 60, slotGap = 8;
+      const hotbarY = contentY + 30;
+      for (let i = 0; i < 6; i++) {
+        const slotX = contentX + i * (slotW + slotGap);
+        if (clickX >= slotX && clickX <= slotX + slotW &&
+            clickY >= hotbarY && clickY <= hotbarY + slotH) {
+          this.selectedHotbarSlot = i;
+          if (this.selectedAbility) {
+            this.gameState.equipAbility(i, this.selectedAbility);
+          }
+          return true;
+        }
+      }
+    }
+    return true; // Consume click si estaba dentro del panel
+  }
+
   drawHotbarTab(ctx, x, y, w, h) {
     ctx.fillStyle = '#667788';
     ctx.font = '10px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText('Select ability or item, then click hotbar slot to assign:', x, y + 12);
+    ctx.fillText('1. Click ability in Abilities tab  2. Click slot here to assign:', x, y + 12);
 
     // Draw hotbar slots
     const slotH = 40, slotW = 60, slotGap = 8;

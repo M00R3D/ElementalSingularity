@@ -175,35 +175,39 @@ export class CombatEngine {
       }
 
       let hit = false;
-      for (const enemy of enemies) {
-        if (enemy.dead) continue;
-        const dist = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
-        if (dist <= projectile.radius + enemy.radius) {
-          const impactDamage = this.calculateDamage(projectile.ability);
-          enemy.takeDamage(impactDamage);
-          if (projectile.ability.burnDuration) {
-            this.applyBurn(enemy, projectile.ability.burnDuration, projectile.ability.burnDps || 4,
-              projectile.ability.projectileColor || '#FF4500');
-          }
-          this.applyKnockback(
-            { x: projectile.x - projectile.vx * 0.01, y: projectile.y - projectile.vy * 0.01 },
-            enemy
-          );
-          const floatColor = projectile.ability.projectileColor
-            || (projectile.ability.element ? this.getElementColor(projectile.ability.element) : '#FFFFFF');
-          this.spawnDamageFloat(enemy.x, enemy.y, impactDamage, floatColor);
-          hit = true;
-          break;
+
+      // Colisión con árboles durante el vuelo (para proyectiles con burn).
+      if (!hit && !projectile.hasBurned && worldMap && projectile.ability.burnDuration) {
+        const collisionR = (projectile.radius || 7) + 24; // proyectil + radio árbol (~22)
+        const burned = worldMap.burnTreeAt(projectile.x, projectile.y, collisionR);
+        if (burned && burned.length > 0) {
+          projectile.hasBurned = true;
+          hit = true; // Proyectil se destruye al tocar árbol
         }
       }
 
-      // Quemar árboles si el proyectil tiene burn effect (en impacto o fin de vida).
-      if (projectile.ability.burnDuration && worldMap) {
-        // Solo quema una vez - si ya fue hitteado o si expiró
-        if ((hit || projectile.life <= 0) && !projectile.hasBurned) {
-          const burnRadius = projectile.radius * 4;  // AoE burning effect - increased radius
-          worldMap.burnTreeAt(projectile.x, projectile.y, burnRadius);
-          projectile.hasBurned = true;  // Marca como quemado para no repetir
+      // Colisión con enemigos.
+      if (!hit) {
+        for (const enemy of enemies) {
+          if (enemy.dead) continue;
+          const dist = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
+          if (dist <= projectile.radius + enemy.radius) {
+            const impactDamage = this.calculateDamage(projectile.ability);
+            enemy.takeDamage(impactDamage);
+            if (projectile.ability.burnDuration) {
+              this.applyBurn(enemy, projectile.ability.burnDuration, projectile.ability.burnDps || 4,
+                projectile.ability.projectileColor || '#FF4500');
+            }
+            this.applyKnockback(
+              { x: projectile.x - projectile.vx * 0.01, y: projectile.y - projectile.vy * 0.01 },
+              enemy
+            );
+            const floatColor = projectile.ability.projectileColor
+              || (projectile.ability.element ? this.getElementColor(projectile.ability.element) : '#FFFFFF');
+            this.spawnDamageFloat(enemy.x, enemy.y, impactDamage, floatColor);
+            hit = true;
+            break;
+          }
         }
       }
 
