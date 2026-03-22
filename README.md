@@ -6,11 +6,63 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 
 ---
 
-## Phase 4: Day/Night Cycle, Crafting & World Selection
+## Phase 4.5: Harvesting Progression, Enhanced Inventory & Tree Burning
 
-### Current Features
+**🔥 LIVE IN THIS PHASE - LATEST FEATURES:**
 
-**✅ World Selection Menu (NEW THIS PHASE)**
+**✅ Axe Requirement System (NEW THIS PHASE)**
+- **Harvesting Progression**: Basic attack no longer fells trees
+- **Tool Requirements**: 
+  - Wooden Axe (crafted): Required for tree harvesting
+  - Stone Axe (crafted): Alternative harvest tool
+- **Feedback**: "You need an axe to fell trees!" notification when attempting without tool
+- **Backwards Compatibility**: Tree harvesting unchanged for players with axe
+
+**✅ Multi-Tab Inventory UI (COMPLETE REDESIGN THIS PHASE)**
+- **Tab System** (Q/W/E hotkeys, or click tabs):
+  - **Items Tab (Q)**: Shows all inventory items in 4-column grid with counts
+    - XP bar at top showing current level, XP progress toward next level
+    - Item colors match gameData definitions
+  - **Abilities Tab (W)**: Scrollable list of all unlocked abilities
+    - Shows ability name + damage/cooldown stats
+    - Selection highlight for browsing
+    - Arrow keys ↑↓ to scroll through list
+  - **Hotbar Tab (E)**: Visual 6-slot hotbar layout
+    - Each slot shows assigned ability name (if equipped)
+    - Keyboard hints: [1] [2] [3] [4] [5] [6]
+    - Foundation for ability/item assignment UI
+- **Scrolling**: Arrow keys ↑↓ for vertical scroll in Abilities/Hotbar tabs
+- **Toggle**: I key opens/closes inventory from any tab
+
+**✅ Tree Burning Mechanics (NEW THIS PHASE)**
+- **Burn Interaction**: Fire-element abilities (fireball) trigger tree burning
+- **Tree States**: 
+  - **Alive** (green): Harvestable with axe, drops wood + XP
+  - **Burning** (red/orange glow, 3s duration): Shows fire particles, tree unavailable
+  - **Burnt** (dark/charred): Drops charcoal + burnt wood instead of regular wood
+- **Visual Effects**:
+  - Red/orange canopy glow with increasing intensity over burn duration
+  - Fire particles spawn continuously during burning phase
+  - Particles: Red-orange (#FF5500) or gold (#FFD700), upward velocity, 0.8s fadeout
+  - Outer glow aura with 40% alpha during burn
+- **Area-of-Effect**: Burning spreads to nearby trees within radius (projectile radius × 2.5)
+- **Loot Drops**: Burned trees drop:
+  - Charcoal (black #1a1a1a) - 40% drop rate
+  - Burnt Wood (dark brown #3a3a2a) - 60% drop rate
+  - Plus 5 XP per burned tree
+
+**✅ New Items (NEW THIS PHASE)**
+- Charcoal: Black crafting material from burned trees (#1a1a1a)
+- Burnt Wood: Dark brown fuel/material from burned trees (#3a3a2a)
+
+**✅ Input System Enhancement (NEW THIS PHASE)**
+- **Inventory Priority**: Opening inventory (I key) blocks all gameplay input
+- **Early Return Pattern**: Tab/scroll input processed first, other keys ignored while inventory open
+- **Prevents Conflicts**: Character movement, ability casting, item harvesting disabled during inventory
+
+### Phase 4 Features (Previous)
+
+**✅ World Selection Menu**
 - **Start Screen**: Choose between 4 pre-configured worlds
 - **World Types**:
   - Enchanted Forest: Balanced difficulty (42 trees, 1 enemy/5s day | 3x night)
@@ -20,7 +72,7 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Navigation**: Arrow keys/WASD to select, ENTER to confirm
 - **Dynamic Stats**: Shows enemy spawn rates and resource distribution
 
-**✅ Day/Night Cycle System (NEW THIS PHASE)**
+**✅ Day/Night Cycle System**
 - **200-second Cycle**: 30% day → 40% night (sine wave) → 30% day
 - **Visual Effects**:
   - Sky color changes dramatically (light blue → dark blue-black)
@@ -29,7 +81,7 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Time Display**: HUD shows current game time (00:00 - 23:59 format)
 - **Dynamic Enemy Spawning**: Spawn rates multiply by world-specific factor at night
 
-**✅ Crafting System (NEW THIS PHASE)**
+**✅ Crafting System**
 - **Recipe List**:
   - **Wooden Axe** (5 Wood + 2 Stone → 1 Axe, 2s craft time)
   - **Stick** (2 Wood → 3 Sticks, 1s craft time) 
@@ -37,15 +89,10 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Crafting UI**: Centered progress bar shows recipe name + progress
 - **Inventory Integration**: Automatically deducts ingredients, adds results
 
-**✅ Fire Element Glow Effects (NEW THIS PHASE)**
+**✅ Fire Element Glow Effects**
 - Fire projectiles (identified by color) gain glowing aura during night
 - Glow intensity matches day/night cycle peak (20-30% alpha)
 - Enhances atmosphere and makes fire abilities stand out in darkness
-
-**✅ New Items (NEW THIS PHASE)**
-- Wooden Axe: Tool for faster tree harvesting
-- Stone Axe: Improved harvest tool
-- Stick: Crafted material for future recipes
 
 ### Enhanced from Phase 3
 
@@ -130,12 +177,14 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 |-----|--------|
 | **WASD** | Move player around the world |
 | **Space** | Spawn enemy at cursor position |
-| **Right-Click** | Harvest tree (when in range, 90px reach) |
+| **Right-Click** | Harvest tree (when in range, 90px reach, requires axe) |
 | **I** | Toggle inventory panel |
+| **Q/W/E** | Switch inventory tabs (Items/Abilities/Hotbar) |
+| **↑↓ (Arrow Keys)** | Scroll in ability/hotbar tabs (when inventory open) |
 | **C** | Open crafting menu (Progress bar shows when crafting) |
-| **1-6** | Select hotbar slot |
+| **1-6** | Select hotbar slot (gameplay) or hotbar slot in inventory (assignment) |
 | **Left-Click** | Cast selected ability (on enemy or free position) |
-| **Arrow Keys** | Navigate world select menu (at game start)
+| **Arrow Keys** | Navigate world select menu (at game start / before world chosen)
 
 ### Gameplay Loop
 
