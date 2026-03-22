@@ -40,10 +40,8 @@ export class InventoryUI {
     ctx.fillStyle = 'rgba(6, 10, 20, 0.95)';
     ctx.strokeStyle = 'rgba(80, 130, 255, 0.50)';
     ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(px, py, panelW, panelH, 10);
-    ctx.fill();
-    ctx.stroke();
+    ctx.fillRect(px, py, panelW, panelH);
+    ctx.strokeRect(px, py, panelW, panelH);
 
     // Title and tabs
     ctx.fillStyle = '#99BBFF';
@@ -136,9 +134,8 @@ export class InventoryUI {
         ctx.fillStyle = '#0a1020';
         ctx.strokeStyle = '#1e2e44';
         ctx.lineWidth = 1;
-        ctx.roundRect(sx, sy, SLOT, SLOT, 4);
-        ctx.fill();
-        ctx.stroke();
+        ctx.fillRect(sx, sy, SLOT, SLOT);
+        ctx.strokeRect(sx, sy, SLOT, SLOT);
 
         if (idx < items.length) {
           const [id, count] = items[idx];

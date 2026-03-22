@@ -197,10 +197,14 @@ export class CombatEngine {
         }
       }
 
-      // Quemar árboles si el proyectil tiene burn effect.
-      if ((hit || projectile.life <= 0) && projectile.ability.burnDuration && worldMap) {
-        const burnRadius = projectile.radius * 2.5;  // AoE burning effect
-        worldMap.burnTreeAt(projectile.x, projectile.y, burnRadius);
+      // Quemar árboles si el proyectil tiene burn effect (en impacto o fin de vida).
+      if (projectile.ability.burnDuration && worldMap) {
+        // Solo quema una vez - si ya fue hitteado o si expiró
+        if ((hit || projectile.life <= 0) && !projectile.hasBurned) {
+          const burnRadius = projectile.radius * 4;  // AoE burning effect - increased radius
+          worldMap.burnTreeAt(projectile.x, projectile.y, burnRadius);
+          projectile.hasBurned = true;  // Marca como quemado para no repetir
+        }
       }
 
       if (hit || projectile.life <= 0) {
