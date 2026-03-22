@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Elemental Singularity - Prototype</title>
+  <style>
+    html,body{height:100%;margin:0;background:#0b0f1a;color:#fff;font-family:sans-serif}
+    canvas{display:block}
+    #hud{position:fixed;left:10px;top:10px;z-index:10}
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="hud"></div>
+  <div id="panels" style="position:fixed;right:10px;top:10px;max-width:320px;z-index:20;font-size:14px">
+    <div id="abilities" style="background:rgba(255,255,255,0.05);padding:8px;margin-bottom:8px;border-radius:6px">
+      <strong>Abilities</strong>
+      <div id="abilityList"></div>
+      <div style="margin-top:8px"><strong>Your Elements</strong></div>
+      <div id="elementPool" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+    </div>
+    <div id="visuals" style="background:rgba(255,255,255,0.05);padding:8px;margin-bottom:8px;border-radius:6px">
+      <strong>Player Visuals</strong>
+      <div>
+        <label><input type="checkbox" id="vis-arms"> Arms</label>
+        <label style="margin-left:8px"><input type="checkbox" id="vis-legs"> Legs</label>
+      </div>
+      <div style="margin-top:6px"><button id="savePreset">Save Preset</button></div>
+      <div id="presets" style="margin-top:6px"></div>
+    </div>
+    <div id="spawnersPanel" style="background:rgba(255,255,255,0.05);padding:8px;border-radius:6px">
+      <strong>Spawners</strong>
+      <div id="spawnerList"></div>
+    </div>
+  </div>
+    <!-- Menu overlay (Tab to open) -->
+    <div id="menuOverlay" style="display:none;position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:760px;max-width:95%;background:rgba(10,12,20,0.95);border:1px solid rgba(255,255,255,0.06);padding:12px;border-radius:8px;color:#fff;z-index:50">
+      <div style="display:flex;gap:12px;align-items:center">
+        <h3 style="margin:0">Menu</h3>
+        <div style="margin-left:auto">
+          <span>Level: <span id="ui-level">1</span></span>
+          <span style="margin-left:12px">Element Points: <span id="ui-ep">0</span></span>
+        </div>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:12px">
+        <button id="tab-shop">Element Shop</button>
+        <button id="tab-equip">Equip Abilities</button>
+      </div>
+      <div id="menuContent" style="margin-top:12px;max-height:420px;overflow:auto"></div>
+      <div style="text-align:right;margin-top:10px"><button id="closeMenu">Close (Tab)</button></div>
+    </div>
+    <!-- Hotbar (drag elements/abilities here) -->
+    <div id="hotbar" style="position:fixed;left:50%;bottom:18px;transform:translateX(-50%);display:flex;gap:8px;z-index:40">
+      <!-- slots inserted by JS -->
+    </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
