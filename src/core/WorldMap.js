@@ -69,7 +69,18 @@ export class WorldMap {
   update(dt) {
     for (const tree of this.trees) {
       if (tree.hitFlash > 0) tree.hitFlash -= dt * 5;
+      if (tree.fireParticles) {
+        for (let i = tree.fireParticles.length - 1; i >= 0; i--) {
+          const p = tree.fireParticles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vy -= 80 * dt; // Gravity
+          p.life -= dt;
+          if (p.life <= 0) tree.fireParticles.splice(i, 1);
+        }
+      }
     }
+    this.updateTreeBurn(dt);
     for (const drop of this.drops) {
       if (!drop.collected) drop._t = ((drop._t || 0) + dt);
     }
@@ -95,11 +106,14 @@ export class WorldMap {
   }
 
   // ── Tree harvesting ──────────────────────────────────────────────────────
-  harvestTreeAt(worldX, worldY, playerX, playerY, playerReach = 90) {
+  harvestTreeAt(worldX, worldY, playerX, playerY, playerReach = 90, hasAxe = false) {
     for (const tree of this.trees) {
-      if (tree.state !== 'alive') continue;
+      if (tree.state === 'stump' || tree.state === 'burning' || tree.state === 'burnt') continue;
       if (Math.hypot(playerX - tree.x, playerY - tree.y) > playerReach) continue;
       if (Math.hypot(worldX  - tree.x, worldY  - tree.y) > tree.radius + 18) continue;
+
+      // Can only harvest alive trees with an axe (basicAttack cannot cut)
+      if (!hasAxe) return { fell: false, reason: 'needs_axe', tree };
 
       tree.hp--;
       tree.hitFlash = 0.6;
@@ -124,6 +138,58 @@ export class WorldMap {
       return { fell, tree };
     }
     return null;
+  }
+
+  // ── Tree burning ────────────────────────────────────────────────────────
+  burnTreeAt(treeX, treeY, radius = 50) {
+    let burned = [];
+    for (const tree of this.trees) {
+      if (tree.state === 'stump' || tree.state === 'burnt' || tree.state === 'burning') continue;
+      if (Math.hypot(treeX - tree.x, treeY - tree.y) > radius) continue;
+
+      tree.state = 'burning';
+      tree.burnDuration = 3.0; // Burn for 3 seconds
+      tree.maxBurnDuration = tree.burnDuration;
+      tree.fireParticles = [];
+      burned.push(tree);
+    }
+    return burned;
+  }
+
+  updateTreeBurn(dt) {
+    for (const tree of this.trees) {
+      if (tree.state !== 'burning') continue;
+
+      tree.burnDuration -= dt;
+
+      // Spawn fire particles
+      if (Math.random() < 0.3) {
+        tree.fireParticles.push({
+          x: tree.x + (Math.random() - 0.5) * 20,
+          y: tree.y + (Math.random() - 0.5) * 20,
+          vx: (Math.random() - 0.5) * 40,
+          vy: -60 - Math.random() * 40,
+          life: 0.8,
+          maxLife: 0.8,
+          color: Math.random() < 0.6 ? '#FF5500' : '#FFD700'
+        });
+      }
+
+      if (tree.burnDuration <= 0) {
+        tree.state = 'burnt';
+        tree.color = '#2a2a1a';
+        // Drop burnt wood and charcoal
+        this.spawnDrop(tree.x, tree.y, 'xp', 5);
+        for (let i = 0; i < 2; i++) {
+          this.spawnDrop(
+            tree.x + (Math.random() - 0.5) * 30,
+            tree.y + (Math.random() - 0.5) * 30,
+            Math.random() < 0.6 ? 'burnt_wood' : 'charcoal',
+            1
+          );
+        }
+      }
+    }
   }
 
   // ── Drawing ──────────────────────────────────────────────────────────────
@@ -179,15 +245,50 @@ export class WorldMap {
       const sx = tree.x - camera.x;
       const sy = tree.y - camera.y;
 
-      if (tree.state === 'stump') {
-        ctx.fillStyle = '#5a3010';
+      if (tree.state === 'stump' || tree.state === 'burnt') {
+        // Stump or burnt tree
+        const color = tree.state === 'burnt' ? '#1a1a1a' : '#5a3010';
+        ctx.fillStyle = color;
         ctx.beginPath();
         ctx.ellipse(sx, sy, 9, 6, 0, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#7a4520';
+        ctx.strokeStyle = tree.state === 'burnt' ? '#0a0a0a' : '#7a4520';
         ctx.lineWidth = 1;
         ctx.stroke();
+      } else if (tree.state === 'burning') {
+        // Burning tree - red/orange canopy
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(sx + 5, sy + tree.radius * 0.6, tree.radius * 0.8, tree.radius * 0.38, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // Trunk
+        ctx.fillStyle = '#3a1a00';
+        ctx.fillRect(sx - 5, sy - 4, 10, tree.radius + 10);
+        // Burning canopy
+        const burnProgress = 1 - (tree.burnDuration / tree.maxBurnDuration);
+        ctx.fillStyle = `rgba(${Math.floor(255 - burnProgress * 100)},${Math.floor(100 + burnProgress * 50)},0,0.9)`;
+        ctx.beginPath();
+        ctx.arc(sx, sy - 10, tree.radius, 0, Math.PI * 2);
+        ctx.fill();
+        // Glow
+        ctx.fillStyle = `rgba(255,100,0,${0.4 * (1 - burnProgress)})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy - 10, tree.radius + 8, 0, Math.PI * 2);
+        ctx.fill();
+        // Draw fire particles
+        if (tree.fireParticles) {
+          ctx.save();
+          for (const p of tree.fireParticles) {
+            ctx.globalAlpha = p.life / p.maxLife * 0.7;
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(sx + (p.x - tree.x), sy + (p.y - tree.y), 4 + Math.random() * 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
       } else {
+        // Alive tree
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
@@ -236,8 +337,10 @@ export class WorldMap {
 
     // Ground drops (XP orbs + items)
     const _itemColor = {
-      wood: '#8B4513', stone: '#888888', goblin_fang: '#FFD700',
-      orc_hide: '#8B2020', bone: '#DDDDC8', crystal_shard: '#CC44FF'
+      wood: '#8B4513', stone: '#888888', stick: '#A0714F', charcoal: '#1a1a1a',
+      burnt_wood: '#3a3a2a', goblin_fang: '#FFD700', orc_hide: '#8B2020', 
+      bone: '#DDDDC8', crystal_shard: '#CC44FF', wooden_axe: '#9B6B47',
+      stone_axe: '#7A8B9F'
     };
     for (const drop of this.drops) {
       if (drop.collected) continue;

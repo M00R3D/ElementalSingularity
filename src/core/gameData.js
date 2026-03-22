@@ -9,10 +9,15 @@ export const GAME_DATA = {
   items: [
     { id: 'wood',          name: 'Wood',         color: '#8B4513' },
     { id: 'stone',         name: 'Stone',        color: '#888888' },
+    { id: 'stick',         name: 'Stick',        color: '#A0714F' },
+    { id: 'charcoal',      name: 'Charcoal',     color: '#1a1a1a' },
+    { id: 'burnt_wood',    name: 'Burnt Wood',   color: '#3a3a2a' },
     { id: 'goblin_fang',   name: 'Goblin Fang',  color: '#FFD700' },
     { id: 'orc_hide',      name: 'Orc Hide',     color: '#8B2020' },
     { id: 'bone',          name: 'Bone',         color: '#DDDDC8' },
-    { id: 'crystal_shard', name: 'Crystal Shard',color: '#CC44FF' }
+    { id: 'crystal_shard', name: 'Crystal Shard',color: '#CC44FF' },
+    { id: 'wooden_axe',    name: 'Wooden Axe',   color: '#9B6B47' },
+    { id: 'stone_axe',     name: 'Stone Axe',    color: '#7A8B9F' }
   ],
   elements: [
     { id: 'fire', name: 'Fire', nameColor: '#FF4500', accentColor: '#FF6347', epithet: 'The Burning' },

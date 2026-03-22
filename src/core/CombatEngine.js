@@ -141,7 +141,7 @@ export class CombatEngine {
     });
   }
 
-  updateProjectiles(dt, enemies) {
+  updateProjectiles(dt, enemies, worldMap) {
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const projectile = this.projectiles[i];
       projectile.x += projectile.vx * dt;
@@ -195,6 +195,12 @@ export class CombatEngine {
           hit = true;
           break;
         }
+      }
+
+      // Quemar árboles si el proyectil tiene burn effect.
+      if ((hit || projectile.life <= 0) && projectile.ability.burnDuration && worldMap) {
+        const burnRadius = projectile.radius * 2.5;  // AoE burning effect
+        worldMap.burnTreeAt(projectile.x, projectile.y, burnRadius);
       }
 
       if (hit || projectile.life <= 0) {

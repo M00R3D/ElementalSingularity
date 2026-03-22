@@ -6,9 +6,59 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 
 ---
 
-## Phase 3: Exploration, Progression & Loot
+## Phase 4: Day/Night Cycle, Crafting & World Selection
 
 ### Current Features
+
+**✅ World Selection Menu (NEW THIS PHASE)**
+- **Start Screen**: Choose between 4 pre-configured worlds
+- **World Types**:
+  - Enchanted Forest: Balanced difficulty (42 trees, 1 enemy/5s day | 3x night)
+  - Volcanic Wasteland: Scarce trees, more rocks (12 trees, 1 enemy/3.3s day | 2.5x night)
+  - Frozen Tundra: Extra dangerous at night (20 trees, 1 enemy/6.7s day | 4x night)
+  - Peaceful Meadow: Beginner-friendly (25 trees, 1 enemy/10s day | 2x night)
+- **Navigation**: Arrow keys/WASD to select, ENTER to confirm
+- **Dynamic Stats**: Shows enemy spawn rates and resource distribution
+
+**✅ Day/Night Cycle System (NEW THIS PHASE)**
+- **200-second Cycle**: 30% day → 40% night (sine wave) → 30% day
+- **Visual Effects**:
+  - Sky color changes dramatically (light blue → dark blue-black)
+  - Ambient lighting shifts (100% → 40% brightness)
+  - Fire projectiles create glow aura at night
+- **Time Display**: HUD shows current game time (00:00 - 23:59 format)
+- **Dynamic Enemy Spawning**: Spawn rates multiply by world-specific factor at night
+
+**✅ Crafting System (NEW THIS PHASE)**
+- **Recipe List**:
+  - **Wooden Axe** (5 Wood + 2 Stone → 1 Axe, 2s craft time)
+  - **Stick** (2 Wood → 3 Sticks, 1s craft time) 
+  - **Stone Axe** (3 Wood + 5 Stone → 1 Stone Axe, 3s craft time)
+- **Crafting UI**: Centered progress bar shows recipe name + progress
+- **Inventory Integration**: Automatically deducts ingredients, adds results
+
+**✅ Fire Element Glow Effects (NEW THIS PHASE)**
+- Fire projectiles (identified by color) gain glowing aura during night
+- Glow intensity matches day/night cycle peak (20-30% alpha)
+- Enhances atmosphere and makes fire abilities stand out in darkness
+
+**✅ New Items (NEW THIS PHASE)**
+- Wooden Axe: Tool for faster tree harvesting
+- Stone Axe: Improved harvest tool
+- Stick: Crafted material for future recipes
+
+### Enhanced from Phase 3
+
+**✅ Enemy Spawning**: Now day/night aware
+- Day: Low spawn rate (world-dependent: 0.1-0.3 per second)
+- Night: Dramatically increased (2-4x multiplier per world)
+- Creates dynamic difficulty shifts and gameplay variety
+
+---
+
+## Previous Phases
+
+### Phase 3: Exploration, Progression & Loot
 
 **✅ Expanded World System**
 - Large explorable map: 2400×1800px with 800×600px viewport
@@ -82,19 +132,23 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 | **Space** | Spawn enemy at cursor position |
 | **Right-Click** | Harvest tree (when in range, 90px reach) |
 | **I** | Toggle inventory panel |
+| **C** | Open crafting menu (Progress bar shows when crafting) |
 | **1-6** | Select hotbar slot |
 | **Left-Click** | Cast selected ability (on enemy or free position) |
+| **Arrow Keys** | Navigate world select menu (at game start)
 
 ### Gameplay Loop
 
-1. **Explore the world** (2400×1800px)
-2. **Harvest trees** with right-click to get wood + XP
-3. **Enemies auto-spawn** around you every 2-5 seconds
-4. **Select ability** and click to attack
-5. **Defeat enemies** to earn XP and loot
-6. **Level up** by gaining enough XP (progress tracked in inventory)
-7. **Manage inventory** with I key
-8. **Survive** and grow stronger!
+1. **Select your world** from the menu (Forest/Volcanic/Tundra/Meadow)
+2. **Explore the world** (2400×1800px with day/night cycle - watch the sky!)
+3. **Harvest trees** with right-click to get wood + XP
+4. **Craft tools** - Wooden Axe (5 Wood + 2 Stone) for faster harvesting
+5. **Enemies auto-spawn** - More aggressively at night (danger increases!)
+6. **Select ability** and click to attack (fire creates glow in darkness)
+7. **Defeat enemies** to earn XP and loot
+8. **Level up** by gaining enough XP
+9. **Manage inventory** with I key, track crafting progress
+10. **Adapt to day/night** - Prepare for the darkness!
 
 ### World Layout
 - Procedurally generated trees and rocks avoid spawn center (200px radius)
@@ -198,6 +252,33 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Resources**: HP, Mana with regeneration
 - **Inventory**: Items dictionary with counts (addItem method)
 - **Cooldowns**: Per-ability cooldown tracking
+
+### Day/Night Cycle (`src/core/DayNightCycle.js`)
+- **Duration**: 200 seconds per full cycle (30% day, 40% night, 30% day)
+- **Glow Intensity**: Sine wave from 0 to 1 during night phase
+- **Sky Color**: Dynamic from light blue (day) to dark blue-black (night)
+- **Ambient Light**: 100% (day) → 40% (night) brightness multiplier
+- **Methods**: `getSkyColor()`, `getAmbientLight()`, `getTimeString()`, `getTimePercentage()`
+
+### World Manager (`src/core/WorldManager.js`)
+- **World Configs**: 4 pre-defined worlds (Forest, Volcanic, Tundra, Meadow)
+- **Per-World Settings**: Unique tree/rock counts, spawn rates, difficulty multipliers
+- **Spawn Dynamics**: Day/night-aware enemy spawn rate calculations
+- **Methods**: `getWorldConfig()`, `getEnemySpawnRate()`, `setCurrentWorld()`
+
+### World Select Menu (`src/core/WorldSelectMenu.js`)
+- **Display**: Centered menu showing all available worlds
+- **Navigation**: Arrow keys/WASD to select, ENTER to confirm
+- **Info**: Shows world name, description, resource counts, enemy stats
+- **Selection Indicator**: Highlights current choice with green border
+- **Methods**: `selectWorld()`, `handleKeyPress()`
+
+### Crafting System (`src/core/CraftingSystem.js`)
+- **Recipes**: 3 craftable items (Wooden Axe, Stick, Stone Axe)
+- **Ingredients**: Lookup from inventory, automatic deduction on craft
+- **Progress**: Time-based, displayed in HUD during crafting
+- **Validation**: `canCraft()` checks ingredient availability
+- **Methods**: `startCraft()`, `update()`, `completeCraft()`, `cancelCraft()`
 - **Hotbar**: 6 slots for ability assignment
 - **Notifications**: Temporary colored messages
 

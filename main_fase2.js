@@ -12,6 +12,10 @@ import HotbarSystem from './src/core/HotbarSystem.js';
 import Camera     from './src/core/Camera.js';
 import WorldMap   from './src/core/WorldMap.js';
 import InventoryUI from './src/core/InventoryUI.js';
+import DayNightCycle from './src/core/DayNightCycle.js';
+import WorldManager from './src/core/WorldManager.js';
+import WorldSelectMenu from './src/core/WorldSelectMenu.js';
+import CraftingSystem from './src/core/CraftingSystem.js';
 
 // Canvas setup
 const canvas = document.querySelector('canvas');
@@ -20,20 +24,30 @@ canvas.width = 800;
 canvas.height = 600;
 
 // Initialize systems
-// World dimensions
-const WORLD_W = GAME_DATA.world.width;
-const WORLD_H = GAME_DATA.world.height;
+// World selection
+const worldManager = new WorldManager();
+const worldSelectMenu = new WorldSelectMenu(worldManager);
+
+// Time system
+const dayNightCycle = new DayNightCycle(200); // 200 second cycle
+
+// World dimensions (will change when world is selected)
+let WORLD_W = GAME_DATA.world.width;
+let WORLD_H = GAME_DATA.world.height;
 
 // Initialize world and view systems
-const camera    = new Camera(WORLD_W, WORLD_H, 800, 600);
-const worldMap  = new WorldMap(GAME_DATA.world);
+let camera    = new Camera(WORLD_W, WORLD_H, 800, 600);
+let worldMap  = new WorldMap(GAME_DATA.world);
 
 // Initialize game systems
-const player        = new PlayerController(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H);
-const entityManager = new EntityManager(GAME_DATA);
-const combatEngine  = new CombatEngine(GAME_DATA, WORLD_W, WORLD_H);
+let player        = new PlayerController(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H);
+let entityManager = new EntityManager(GAME_DATA);
+let combatEngine  = new CombatEngine(GAME_DATA, WORLD_W, WORLD_H);
 const hotbarSystem = new HotbarSystem(GAME_DATA, gameState);
 const inventoryUI  = new InventoryUI(GAME_DATA, gameState, player);
+const craftingSystem = new CraftingSystem(GAME_DATA);
+
+let gameStarted = false; // Set to true when world is selected
 
 // Input state
 const input = { w: false, a: false, s: false, d: false, mouseX: 400, mouseY: 300 };
@@ -49,6 +63,28 @@ const FREE_CAST_ABILITIES = new Set(['basicAttack', 'fireball']);
 // ========== INPUT SETUP ==========
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
+
+  // Inventory UI input handling
+  if (inventoryUI.isOpen) {
+    inventoryUI.handleKeyInput(key);
+    if (key === 'i') {
+      inventoryUI.toggle();
+    }
+    return;
+  }
+
+  // World select menu input
+  if (worldSelectMenu.isOpen) {
+    if (key === 'arrowup' || key === 'w') worldSelectMenu.handleKeyPress('arrowup');
+    if (key === 'arrowdown' || key === 's') worldSelectMenu.handleKeyPress('arrowdown');
+    if (key === 'enter') {
+      worldSelectMenu.selectWorld();
+      gameStarted = true;
+    }
+    return;
+  }
+
+  // Normal gameplay input
   if (key === 'w') input.w = true;
   if (key === 'a') input.a = true;
   if (key === 's') input.s = true;
@@ -64,6 +100,12 @@ window.addEventListener('keydown', (e) => {
   // I toggles inventory.
   if (key === 'i') {
     inventoryUI.toggle();
+    return;
+  }
+
+  // C toggles crafting UI
+  if (key === 'c') {
+    // TODO: Add crafting UI toggle
     return;
   }
 
@@ -166,14 +208,35 @@ canvas.addEventListener('contextmenu', (e) => {
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
   const worldPos = camera.toWorld(clickX, clickY);
-  const result = worldMap.harvestTreeAt(worldPos.x, worldPos.y, player.x, player.y, 95);
-  if (result && result.fell) {
-    gameState.notify('Tree felled: +Wood +XP', '#AAFF99', 0.9);
+  
+  // Check if player has axe
+  const hasWoodenAxe = (gameState.inventory.items['wooden_axe'] || 0) > 0;
+  const hasStoneAxe = (gameState.inventory.items['stone_axe'] || 0) > 0;
+  const hasAxe = hasWoodenAxe || hasStoneAxe;
+  
+  const result = worldMap.harvestTreeAt(worldPos.x, worldPos.y, player.x, player.y, 95, hasAxe);
+  
+  if (result) {
+    if (result.reason === 'needs_axe') {
+      gameState.notify('You need an axe to fell trees!', '#FF9999', 0.9);
+    } else if (result.fell) {
+      gameState.notify('Tree felled: +Wood +XP', '#AAFF99', 0.9);
+    } else {
+      gameState.notify('Tree damaged...', '#FFFFAA', 0.6);
+    }
   }
 });
 
 // ========== UPDATE FUNCTION ==========
 function update(dt) {
+  if (!gameStarted) return;
+
+  // Update day/night cycle
+  dayNightCycle.update(dt);
+
+  // Update crafting
+  craftingSystem.update(dt, gameState.inventory);
+
   gameState.updateResources(dt);
   gameState.updateNotifications(dt);
   gameState.updateCooldowns(dt);
@@ -181,6 +244,21 @@ function update(dt) {
   player.update(dt, input);
   camera.follow(player);
   worldMap.update(dt);
+  
+  // Update entity spawning based on day/night
+  const spawnRate = worldManager.getEnemySpawnRate(dayNightCycle);
+  entityManager._spawnTimer += dt;
+  const spawnInterval = 1 / spawnRate; // Convert rate to interval
+  if (entityManager._spawnTimer >= spawnInterval && entityManager.enemies.length < entityManager.maxEnemies) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 350 + Math.random() * 150;
+    const spawnX = player.x + Math.cos(angle) * distance;
+    const spawnY = player.y + Math.sin(angle) * distance;
+    const typeId = ['goblin', 'skeleton', 'orc'][Math.floor(Math.random() * 3)];
+    entityManager.spawnEnemy(spawnX, spawnY, typeId);
+    entityManager._spawnTimer = 0;
+  }
+  
   entityManager.update(dt, input, player, worldMap);
 
   // Auto-pickup nearby drops
@@ -194,7 +272,7 @@ function update(dt) {
     }
   }
 
-  combatEngine.updateProjectiles(dt, entityManager.enemies);
+  combatEngine.updateProjectiles(dt, entityManager.enemies, worldMap);
   combatEngine.updateSlashes(dt, entityManager.enemies);
   combatEngine.updateParticles(dt);
   combatEngine.updateFloats(dt);
@@ -210,6 +288,18 @@ function update(dt) {
 
 // ========== DRAW FUNCTION ==========
 function draw() {
+  // Draw world select menu if open
+  if (worldSelectMenu.isOpen) {
+    worldSelectMenu.draw(ctx, canvas);
+    return;
+  }
+
+  if (!gameStarted) return;
+
+  // Apply day/night sky overlay
+  ctx.fillStyle = dayNightCycle.getSkyColor();
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
   // Draw world background + world objects
   worldMap.drawBackground(ctx, camera);
   worldMap.drawObjects(ctx, camera);
@@ -224,6 +314,21 @@ function draw() {
   combatEngine.drawParticles(ctx, camera);
   combatEngine.drawFloats(ctx, camera);
 
+  // Draw glow effect for fire projectiles at night
+  if (dayNightCycle.isNight && dayNightCycle.glowIntensity > 0.1) {
+    ctx.save();
+    ctx.globalAlpha = dayNightCycle.glowIntensity * 0.3;
+    for (const proj of combatEngine.projectiles) {
+      if (proj.color && proj.color.includes('FF55')) { // Fire-colored projectiles
+        ctx.fillStyle = proj.color;
+        ctx.beginPath();
+        ctx.arc(proj.x - camera.x, proj.y - camera.y, proj.radius + 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
   // Draw HUD
   ctx.fillStyle = '#FFFFFF';
   ctx.font = 'bold 14px Arial';
@@ -233,6 +338,36 @@ function draw() {
   ctx.fillText(`Lv: ${player.level}  XP: ${player.xp}/${player.xpToNext}`, 10, 80);
   ctx.fillText(`Items: ${Object.keys(gameState.inventory.items).length}`, 10, 100);
   ctx.fillText(`FPS: ${Math.round(1 / Math.max(0.0001, deltaTime))}`, 10, 120);
+
+  // Day/Night info
+  const timeStr = dayNightCycle.getTimeString();
+  const dayNightText = dayNightCycle.isNight ? '🌙 NIGHT' : '☀️  DAY';
+  ctx.fillStyle = dayNightCycle.isNight ? '#4488FF' : '#FFAA44';
+  ctx.font = 'bold 12px Arial';
+  ctx.fillText(`${dayNightText}  ${timeStr}`, canvas.width - 140, 20);
+
+  // Crafting status
+  if (craftingSystem.isCrafting && craftingSystem.currentRecipe) {
+    const craftX = canvas.width / 2 - 80;
+    const craftY = 40;
+    const recipe = craftingSystem.currentRecipe;
+    ctx.fillStyle = 'rgba(60, 80, 120, 0.7)';
+    ctx.fillRect(craftX, craftY, 160, 50);
+    ctx.strokeStyle = '#5599FF';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(craftX, craftY, 160, 50);
+    ctx.fillStyle = '#AAFFCC';
+    ctx.font = 'bold 11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Crafting:', craftX + 80, craftY + 16);
+    ctx.fillText(recipe.name, craftX + 80, craftY + 28);
+    ctx.fillStyle = '#5599FF';
+    const barW = 140;
+    ctx.fillRect(craftX + 10, craftY + 34, barW, 8);
+    ctx.fillStyle = '#AAFFCC';
+    ctx.fillRect(craftX + 10, craftY + 34, barW * craftingSystem.craftProgress, 8);
+    ctx.textAlign = 'left';
+  }
 
   // Cast feedback in HUD
   if (castHudFlash > 0) {
@@ -259,6 +394,7 @@ function draw() {
 
   // Draw notifications
   ctx.font = '12px Arial';
+  ctx.textAlign = 'left';
   gameState.notifications.forEach((notif, index) => {
     ctx.fillStyle = notif.color;
     ctx.globalAlpha = 1 - (notif.elapsed / notif.duration);
@@ -272,7 +408,8 @@ function draw() {
   // Draw selected slot indicator
   ctx.fillStyle = '#00FF00';
   ctx.font = 'bold 12px Arial';
-  ctx.fillText(`Selected: Slot ${selectedSlot + 1}`, canvas.width - 200, 20);
+  ctx.textAlign = 'right';
+  ctx.fillText(`Selected: Slot ${selectedSlot + 1}`, canvas.width - 20, 20);
 
   // Inventory panel (screen-space)
   inventoryUI.draw(ctx, canvas);
@@ -292,6 +429,7 @@ function draw() {
   ctx.beginPath();
   ctx.arc(px, py, 3, 0, Math.PI * 2);
   ctx.fill();
+  ctx.textAlign = 'left';
 }
 
 // ========== GAME LOOP ==========
