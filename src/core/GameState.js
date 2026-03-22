@@ -53,6 +53,10 @@ export class GameStateManager {
   notify(message, color = '#FFFFFF', duration = 2.0) {
     this.notifications.push({ message, color, duration, elapsed: 0 });
   }
+
+  addItem(id, count = 1) {
+    this.inventory.items[id] = (this.inventory.items[id] || 0) + count;
+  }
 }
 
 export const gameState = new GameStateManager();

@@ -4,8 +4,10 @@
 // ========================================
 
 export class CombatEngine {
-  constructor(gameData) {
-    this.gameData = gameData;
+  constructor(gameData, worldWidth = 2400, worldHeight = 1800) {
+    this.gameData    = gameData;
+    this.worldWidth  = worldWidth;
+    this.worldHeight = worldHeight;
     this.damageFloats = [];
     this.projectiles = [];
     this.slashes = [];
@@ -98,11 +100,13 @@ export class CombatEngine {
     }
   }
 
-  drawSlashes(ctx) {
+  drawSlashes(ctx, camera = null) {
+    const camX = camera ? camera.x : 0;
+    const camY = camera ? camera.y : 0;
     for (const s of this.slashes) {
       const progress = s.life / s.maxLife; // 1 → 0
-      const cx = s.x + Math.cos(s.angle) * s.depth * 0.5;
-      const cy = s.y + Math.sin(s.angle) * s.depth * 0.5;
+      const cx = s.x + Math.cos(s.angle) * s.depth * 0.5 - camX;
+      const cy = s.y + Math.sin(s.angle) * s.depth * 0.5 - camY;
       ctx.save();
       ctx.globalAlpha = progress * 0.82;
       ctx.translate(cx, cy);
@@ -158,15 +162,15 @@ export class CombatEngine {
       if (projectile.x - projectile.radius <= 0) {
         projectile.x = projectile.radius;
         projectile.vx = Math.abs(projectile.vx);
-      } else if (projectile.x + projectile.radius >= 800) {
-        projectile.x = 800 - projectile.radius;
+      } else if (projectile.x + projectile.radius >= this.worldWidth) {
+        projectile.x = this.worldWidth - projectile.radius;
         projectile.vx = -Math.abs(projectile.vx);
       }
       if (projectile.y - projectile.radius <= 0) {
         projectile.y = projectile.radius;
         projectile.vy = Math.abs(projectile.vy);
-      } else if (projectile.y + projectile.radius >= 600) {
-        projectile.y = 600 - projectile.radius;
+      } else if (projectile.y + projectile.radius >= this.worldHeight) {
+        projectile.y = this.worldHeight - projectile.radius;
         projectile.vy = -Math.abs(projectile.vy);
       }
 
@@ -242,13 +246,15 @@ export class CombatEngine {
     })).filter(f => f.timeLeft > 0);
   }
 
-  drawProjectiles(ctx) {
+  drawProjectiles(ctx, camera = null) {
+    const camX = camera ? camera.x : 0;
+    const camY = camera ? camera.y : 0;
     for (const projectile of this.projectiles) {
       const color = projectile.ability.projectileColor || '#FFFFFF';
       ctx.save();
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(projectile.x, projectile.y, projectile.radius, 0, Math.PI * 2);
+      ctx.arc(projectile.x - camX, projectile.y - camY, projectile.radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 1.5;
@@ -279,24 +285,28 @@ export class CombatEngine {
     }
   }
 
-  drawParticles(ctx) {
+  drawParticles(ctx, camera = null) {
+    const camX = camera ? camera.x : 0;
+    const camY = camera ? camera.y : 0;
     for (const p of this.particles) {
       ctx.save();
       ctx.globalAlpha = (p.life / p.maxLife) * 0.9;
       ctx.fillStyle = p.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.arc(p.x - camX, p.y - camY, p.size, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
   }
 
-  drawFloats(ctx) {
+  drawFloats(ctx, camera = null) {
+    const camX = camera ? camera.x : 0;
+    const camY = camera ? camera.y : 0;
     ctx.font = 'bold 16px Arial';
     for (const f of this.damageFloats) {
       ctx.fillStyle = f.color;
       ctx.globalAlpha = f.timeLeft;
-      ctx.fillText(f.damage, f.x, f.y);
+      ctx.fillText(f.damage, f.x - camX, f.y - camY);
     }
     ctx.globalAlpha = 1;
   }

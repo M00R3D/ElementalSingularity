@@ -1,59 +1,74 @@
 # Elemental Singularity
 
-**A real-time action arena with element-based abilities, dynamic enemy AI, and advanced particle effects.**
+**A real-time top-down action RPG with element-based combat, procedural world exploration, enemy AI, progression system, and inventory management.**
 
 Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at 60 FPS.
 
 ---
 
-## Phase 2: Core Combat System
+## Phase 3: Exploration, Progression & Loot
 
 ### Current Features
 
-**✅ Real-time Combat**
-- Player movement with WASD
-- Click-to-cast ability system
+**✅ Expanded World System**
+- Large explorable map: 2400×1800px with 800×600px viewport
+- Camera follow system (viewport-clamped to world bounds)
+- Procedural generation: seeded trees (42) and rocks (28) scattered across world
+- World boundary visualization (orange border)
+- Tiled earth background with procedural color variation
+
+**✅ Resource Gathering (NEW THIS PHASE)**
+- **Trees**: Harvestable with right-click (90px reach), drop wood + XP (3 hits to fell)
+- **Rocks**: Visual elements (non-interactive in v3.0, placeholder for future mining)
+- **Automatic Drop Collection**: Nearby drops auto-pickup (36px radius)
+- **Item Types**: Wood, Stone, Goblin Fang, Orc Hide, Bone, Crystal Shard
+
+**✅ Progression System (NEW THIS PHASE)**
+- **XP & Levels**: Earn XP from killing enemies and harvesting trees
+- **10-Level Cap**: Thresholds scale exponentially (50, 120, 240... up to 2600 XP at Lv 9)
+- **Level-Up Mechanics**: +10 HP per level (max 150), auto-heal on level up
+- **XP Tracking**: Persistent xp/level on player object
+
+**✅ Inventory System (NEW THIS PHASE)**
+- **5×4 Grid**: 20 item slots displayed in centered modal
+- **Toggle with I Key**: Open/close inventory panel
+- **Item Display**: Colored blocks with names and stack counts
+- **XP Bar**: Shows level, current XP progress toward next level
+
+**✅ Enemy AI & Spawning (UPDATED THIS PHASE)**
+- **Auto-Spawn System**: Enemies spawn automatically around player every 2-5 seconds
+- **Multi-Type Enemies**: Goblin (40hp, 80spd), Orc (120hp, 48spd), Skeleton (65hp, 62spd)
+- **Speed-Based Homing**: Each type has distinct acceleration (65% of max speed)
+- **Loot Drops**: On death, drop XP + random item (35-55% chance per type)
+- **Type-Specific Stats**: Stats loaded from gameData.enemyTypes
+
+**✅ Enhanced Combat System**
+- All draws camera-aware (slashes, projectiles, particles, floats)
+- Projectile bounce uses world bounds (2400×1800) not canvas bounds
+- Damage floats display in world-space with camera offset
+
+**✅ Real-time Combat (From Phase 2)**
+- Click-to-cast ability system with world-space targeting
 - 6-slot hotbar with keyboard selection (1-6)
 - Free-cast abilities (basicAttack, fireball)
 
-**✅ Enemy AI (NEW THIS SESSION)**
-- Unlimited enemy spawning (space key at cursor)
-- Homing behavior (max 85 px/s toward player)
-- Cooldown-based attack system (no direct contact damage)
-- Attack range checking (26px)
-- Knockback on successful hit
-- Visual attack indicator (red attackFlash ring)
+**✅ Enemy AI (From Phase 2)**
+- Homing behavior with type-specific max speeds
+- Cooldown-based attack system
+- Attack range checking
+- Knockback on hit + visual attack indicator
 
-**✅ Advanced Particle Systems (NEW THIS SESSION)**
-- **Fireball flames**: Orange/red particles trail projectiles
-- **Burn particles**: Enemies emit particles while burning
-- Particle physics: velocity, gravity, fade-out
-- Smooth alpha blending and visual feedback
-
-**✅ Projectile Physics (NEW THIS SESSION)**
-- Edge bounce (reflect off 800×600 map bounds)
-- No despawn on exit — projectiles stay alive
-- Burn status on impact (3s duration, 4 DPS)
-- Projectile-to-enemy collision detection
-
-**✅ Knockback System (NEW THIS SESSION)**
-- Player receives knockback from enemy attacks
-- Smooth decay (exponential falloff)
-- Applied alongside player movement
-- Force-based calculation (260 units base force)
-
-**✅ Element System**
-- 8 playable elements (Fire, Water, Air, Earth, Lightning, Ice, Nature, Light)
-- Element-based ability colors and properties
-- Affinity tracking per element
+**✅ Advanced Particle Systems (From Phase 2)**
+- Fireball flame trails
+- Burn status particles on enemies
+- Smooth fade-out and physics
 
 **✅ User Interface**
-- HUD showing: HP, Mana, Enemy count, Unlocked elements, FPS
-- Cast feedback: Colored flash on ability cast
-- Cast text: Ability name displayed for 0.8s
-- Notification system (with auto-dismiss)
-- Hotbar UI with selected slot highlight
-- Damage floats with element colors
+- HUD: HP, Mana, Enemy count, Level/XP, Item count, FPS
+- Cast feedback with colored pulses
+- Notification system with auto-dismiss
+- Hotbar with slot highlight
+- Mini-map (bottom-right, 140×100px, green player marker)
 
 ---
 
@@ -63,43 +78,47 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 
 | Key | Action |
 |-----|--------|
-| **WASD** | Move player around the arena |
-| **Space** | Spawn enemy at cursor position (unlimited) |
+| **WASD** | Move player around the world |
+| **Space** | Spawn enemy at cursor position |
+| **Right-Click** | Harvest tree (when in range, 90px reach) |
+| **I** | Toggle inventory panel |
 | **1-6** | Select hotbar slot |
-| **Click** | Cast selected ability (on enemy or free position) |
+| **Left-Click** | Cast selected ability (on enemy or free position) |
 
 ### Gameplay Loop
 
-1. **Spawn enemies** by pressing Space
-2. **Select ability** using number keys (1-6) or clicking hotbar
-3. **Click to cast**:
-   - Target an enemy (40px range detection)
-   - Or free-cast (for basicAttack, fireball)
-4. **Combat**:
-   - Enemies deal damage + knockback on hit
-   - You deal damage + knockback to them
-   - Manage your HP carefully
-5. **Effects**:
-   - Watch flame particles from fireballs
-   - See burn particles on burning enemies
-   - Notice projectiles bouncing off edges
+1. **Explore the world** (2400×1800px)
+2. **Harvest trees** with right-click to get wood + XP
+3. **Enemies auto-spawn** around you every 2-5 seconds
+4. **Select ability** and click to attack
+5. **Defeat enemies** to earn XP and loot
+6. **Level up** by gaining enough XP (progress tracked in inventory)
+7. **Manage inventory** with I key
+8. **Survive** and grow stronger!
+
+### World Layout
+- Procedurally generated trees and rocks avoid spawn center (200px radius)
+- Drops appear on ground with bobbing animation
+- XP orbs: Green glowing circles (auto-collect)
+- Items: Colored rounded rectangles (wood=brown, stone=gray, etc.)
+- World boundary marked with orange border
 
 ---
 
 ## Abilities
 
-### Current Ability Pool
+### Current Ability Pool (4 active)
 
 #### **basicAttack** (Slot 1 - Default)
 - **Type**: Slash (instant AoE half-ellipse)
 - **Damage**: 14
 - **Cooldown**: 0.25s
 - **Mana Cost**: 0 (free)
-- **Effect**: Half-ellipse slash in front of player, hits all enemies in area
+- **Effect**: Half-ellipse slash in front of player, hits all in area
 - **Knockback**: Yes
 
 #### **fireball** (Slot 2 - Default)
-- **Type**: Projectile (travels, bounces)
+- **Type**: Projectile (travels, bounces at world bounds)
 - **Damage**: 22
 - **Cooldown**: 0.4s
 - **Mana Cost**: 8
@@ -109,8 +128,7 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Effect**: 
   - Emits flame particles while traveling
   - Applies burn on hit (3s, 4 DPS)
-  - Burning enemies emit burn particles
-  - Bounces off map edges
+  - Bounces off world edges (2400×1800 bounds)
 - **Color**: #FF5500 (orange-red)
 
 #### **waterbolt** (Available)
@@ -118,7 +136,6 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Damage**: 18
 - **Cooldown**: 0.8s
 - **Mana Cost**: 12
-- **Range**: 140px
 - **Element**: Water
 
 #### **airslash** (Available)
@@ -126,61 +143,63 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 - **Damage**: 22
 - **Cooldown**: 1.2s
 - **Mana Cost**: 18
-- **Range**: 130px
 - **Element**: Air
 
 ---
 
 ## Game Systems
 
-### Combat Engine (`src/core/CombatEngine.js`)
-- **Ability Execution**: Resolve ability type (slash or projectile)
-- **Slashes**: Half-ellipse AoE with rotation
-- **Projectiles**: Physics-based with edge bounce
-- **Damage Calculation**: Base damage × random 0.85-1.15 variance
-- **Knockback**: Force-based physics
-- **Burn Status**: Tick damage every 0.4s
-- **Particles**: Flame (projectile trail), burn (enemy status)
-- **Damage Floats**: Floating combat text with colors
+### Camera System (`src/core/Camera.js`)
+- **Follow**: Smoothly follows player within world bounds
+- **Viewport**: 800×600 view of 2400×1800 world
+- **Culling**: `isVisible()` check prevents off-screen rendering
+- **Coordinate Transform**: `toWorld()` & `toScreen()` for input/output translation
 
-### Entity Manager (`src/core/Entity.js`)
-- **Player Sync**: Mirrors PlayerController position
-- **Enemy Spawning**: Configurable position, unlimited quantity
-- **Enemy AI**:
-  - Homing toward player target
-  - Attack cooldown system
-  - Range-checked attacking
-  - Apply player knockback on hit
-- **Burn Tick**: Damage application per frame
-- **Edge Bounce**: X/Y axis reflection
-- **Particle Emission**: Burn particles from affected enemies
-- **Drawing**: Enemies with burn ring, attack ring, HP bar
+### World Map System (`src/core/WorldMap.js`)
+- **Procedural Generation**: Seeded RNG (LCG) for consistent tree/rock placement
+- **Trees**: 42 trees with 3 HP each, harvestable, drop wood (1-2) + XP (8)
+- **Rocks**: 28 decorative rocks with rotated ellipses
+- **Drops**: Ground items with auto-pickup, bobbing animation
+- **Background**: Tiled 80×80px earth squares with varied coloring
+- **Methods**: `harvestTreeAt()`, `spawnDrop()`, `collectDrops()`
+
+### Inventory UI (`src/core/InventoryUI.js`)
+- **Panel**: 5×4 grid (20 slots) displayed in canvas center
+- **Toggle**: I key opens/closes modal
+- **Display**: Item name, color block, stack count
+- **XP Bar**: Shows current level and XP progress to next level
+- **Screen-Space**: Rendered after world (doesn't follow camera)
+
+### Combat Engine (`src/core/CombatEngine.js`)
+- **Ability Execution**: Routes to slash or projectile
+- **Slashes**: Half-ellipse AoE, camera-aware draw
+- **Projectiles**: World-bound physics (2400×1800), edge bounce
+- **Particles**: Flame trails, burn status effects
+- **Damage Floats**: World-space text with camera offset
+- **Burn Tick**: 0.4s intervals, configurable DPS
 
 ### Player Controller (`src/core/PlayerController.js`)
-- **Movement**: WASD input with 150 px/s speed
-- **Health**: HP tracking (100 max)
-- **Knockback State**: kbx, kby with decay
-- **Cast Feedback**: Visual pulse on ability use
-- **Health Bar**: Color-coded (green→yellow→red)
-- **Bounds Checking**: Clamps to canvas edges
+- **Movement**: WASD at 150 px/s within world bounds
+- **Stats**: HP (100-150 depending on level), Mana, Speed
+- **Progression**: Level (1-10), XP with thresholds, auto-level-up
+- **Knockback**: kbx, kby with exponential decay
+- **Draw**: Camera-aware circle + health bar + cast pulse ring
+- **Methods**: `gainXP()`, `xpToNext`, `xpProgress` (getter)
+
+### Entity Manager (`src/core/Entity.js`)
+- **Auto-Spawn**: Enemies spawn every 2-5s around player (radius 350-500px)
+- **Multi-Type**: Lookup from gameData.enemyTypes (goblin, orc, skeleton)
+- **Homing**: Speed-based pursuit (65% of max speed acceleration)
+- **Burn Tick**: Per-enemy damage interval
+- **Loot Drops**: On death, spawn XP + item (based on type's lootChance)
+- **Draw**: Camera culling, world-space rendering
 
 ### Game State (`src/core/GameState.js`)
-- **Resources**: HP, Mana with regeneration (0.5 mana/s)
+- **Resources**: HP, Mana with regeneration
+- **Inventory**: Items dictionary with counts (addItem method)
 - **Cooldowns**: Per-ability cooldown tracking
 - **Hotbar**: 6 slots for ability assignment
-- **Notifications**: Temporary messages with auto-dismiss
-- **Affinity**: Element tracking (unused currently)
-
-### Hotbar System (`src/core/HotbarSystem.js`)
-- **UI Rendering**: 6 slots at bottom-center of canvas
-- **Slot Highlighting**: Selected slot has gold border + overlay
-- **Ability Info**: Ability name, element color, icon
-- **Mouse Detection**: Click slots to select
-
-### Element Manager (`src/core/ElementManager.js`)
-- **Unlock Tracking**: Per-element affinity count
-- **Element List**: 8 elements with colors and epithets
-- **Ability Filtering**: Abilities per element
+- **Notifications**: Temporary colored messages
 
 ---
 
@@ -188,28 +207,37 @@ Built with vanilla JavaScript + HTML5 Canvas. No dependencies. Pure rendering at
 
 ```
 main_fase2.js (60 FPS Game Loop)
-├─ Input Handling (WASD, Space, Click, 1-6)
+├─ Input Handling (WASD, Space, Right-Click, I, 1-6, Click)
 ├─ Update Systems (5ms budget)
+│  ├─ Camera follow
+│  ├─ World map update (trees, drops)
 │  ├─ Player (movement + knockback decay)
-│  ├─ Entities (enemy AI + burn tick)
+│  ├─ Entities (enemy spawning + AI + burn tick + loot drops)
+│  ├─ Drop collection (XP gain + inventory)
 │  ├─ Combat (projectiles + slashes + particles)
 │  └─ State (cooldowns + resources)
 └─ Draw Systems (9ms budget)
+   ├─ World (background tiles + rocks + trees + drops)
    ├─ Entities (player + enemies)
-   ├─ Combat Effects (slashes + projectiles + particles)
-   └─ HUD (bars + text + notifications)
+   ├─ Combat Effects (slashes + projectiles + particles + floats)
+   ├─ Inventory UI (modal, screen-space)
+   ├─ Mini-map
+   └─ HUD (bars + text)
 ```
 
 **Active Files Only**
 ```
 src/core/
-├── PlayerController.js     (player movement, health, knockback)
-├── Entity.js               (enemy manager, AI, burn tick)
-├── CombatEngine.js         (abilities, projectiles, particles)
-├── GameState.js            (global state, cooldowns, mana)
+├── Camera.js               (viewport follow, coordinate xforms)
+├── WorldMap.js             (procedural generation, trees, rocks, drops)
+├── InventoryUI.js          (inventory panel, item display, XP bar)
+├── PlayerController.js     (player movement, health, XP/level, knockback)
+├── Entity.js               (enemy manager, auto-spawn, AI, loot drops)
+├── CombatEngine.js         (abilities, projectiles, particles, camera-aware draws)
+├── GameState.js            (global state, cooldowns, mana, inventory)
 ├── HotbarSystem.js         (hotbar UI rendering)
 ├── ElementManager.js       (element tracking)
-└── gameData.js             (ability & element definitions)
+└── gameData.js             (world, items, ability & enemy definitions)
 
 index.html                  (canvas entry point)
 main_fase2.js              (game loop)
@@ -222,73 +250,88 @@ main_fase2.js              (game loop)
 | Metric | Target | Status |
 |--------|--------|--------|
 | FPS | 60 stable | ✅ Achieved |
-| Max Enemies | 100 | ~Test verified |
+| Max Enemies | 100 | ✅ Tested |
 | Particles | 500+ | ✅ Active |
+| Draws per frame | <1000 | ✅ Culled |
 | Frame Time | 16.67ms | ✅ Met |
 | - Update | 5ms | ✅ Estimated |
 | - Render | 9ms | ✅ Estimated |
 | - Overhead | 2.67ms | ✅ Estimated |
-| Memory | ~475KB | ✅ Minimal |
+| Memory | ~550KB | ✅ Minimal |
+
+**Optimizations**
+- Camera culling: Enemies/particles outside viewport skipped
+- Drop filter: Instant removal of collected items
+- Seeded RNG: One-time generation at startup
 
 ---
 
 ## Canvas & Setup
 
-- **Resolution**: 800×600px (fixed)
+- **Viewport**: 800×600px (fixed window)
+- **World**: 2400×1800px (explorable)
 - **Background**: #0a0a1a (dark blue-black)
-- **Color Scheme**: Element-based + fire/ice/water/earth theme
+- **View Mode**: Camera follow with clamped scroll
 - **Entry Point**: `index.html` → `main_fase2.js`
 - **No build tools**: Pure ES6 modules in browser
 
 ---
 
-## Data Configuration
+## Game Data Configuration
 
-All game data is defined in `src/core/gameData.js`:
+All game data defined in `src/core/gameData.js`:
+
+**World Config**
+- Size: 2400×1800px
+- Trees: 42 (auto-generated)
+- Rocks: 28 (auto-generated)
+- Seed: 1337 (procedural generation)
+
+**Items** (6 types)
+- Wood (brown #8B4513)
+- Stone (gray #888888)
+- Goblin Fang (gold #FFD700)
+- Orc Hide (dark red #8B2020)
+- Bone (tan #DDDDC8)
+- Crystal Shard (purple #CC44FF)
+
+**Enemy Types** (3 active)
+
+| Type | HP | Speed | Radius | XP | Loot | Drop% |
+|------|-------|-------|--------|----|----|---------|
+| Goblin | 40 | 80 | 12 | 10 | goblin_fang | 35% |
+| Skeleton | 65 | 62 | 13 | 22 | bone | 55% |
+| Orc | 120 | 48 | 19 | 35 | orc_hide | 50% |
 
 **Elements** (8 total)
 - Fire, Water, Air, Earth, Lightning, Ice, Nature, Light
 - Each with nameColor, accentColor, epithet
 
 **Abilities** (4 active)
-- basicAttack (slash, 0.25s cooldown)
-- fireball (projectile, 0.4s cooldown, burn)
-- waterbolt (target-based, 0.8s cooldown)
-- airslash (target-based, 1.2s cooldown)
-
-**Enemy Types** (3 defined)
-- Goblin (15 HP, 80 speed)
-- Orc (30 HP, 60 speed)
-- Skeleton (20 HP, 70 speed)
-
-**Materials** (4 types)
-- Wood (common), Stone (common), Metal (uncommon), Crystal (rare)
+- basicAttack (slash, 0.25s cooldown, free)
+- fireball (projectile, 0.4s cooldown, 8 mana, burn)
+- waterbolt (target, 0.8s cooldown, 12 mana)
+- airslash (target, 1.2s cooldown, 18 mana)
 
 ---
 
 ## Next Steps (Roadmap)
 
-1. **Add more ability types**
-   - Burst (multi-hit AoE)
-   - Channel (sustained damage)
-   - Utility (buffs, debuffs)
+### Phase 4: Crafting & Upgrades
+- Crafting recipes (wood → planks, fang + hide → armor)
+- Equipment slots (weapon, armor, ring)
+- Stat scaling per equipment rarity
+- Player stat display (attack, defense, speed scales)
 
-2. **Enemy variety**
-   - Different AI behaviors
-   - Element-based enemies
-   - Boss encounters
-
-3. **Visual Polish**
-   - Screen shake on impact
-   - Hit flash feedback
-   - Ability cast animations
-   - Trail effects
-
-4. **Advanced Features**
-   - Element synergies
-   - Combo system
-   - Alchemy/crafting
-   - Upgrades
+### Future Expansions
+1. **More Enemies**: Boss encounters, elite variants, rare drops
+2. **New Abilities**: Combo system, channeled abilities, area buffs
+3. **Dungeons**: Procedural multi-room dungeons with loot
+4. **Alchemy**: Potion brewing, buff crafting
+5. **Persistence**: Save/load game state to localStorage
+6. **Audio**: Sound effects, background music
+7. **Skill Trees**: Talent progression, passive bonuses
+8. **PvE Raids**: Team objectives, shared resources
 
 ---
 

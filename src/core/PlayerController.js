@@ -4,7 +4,7 @@
 // ========================================
 
 export class PlayerController {
-  constructor(x = 400, y = 300) {
+  constructor(x = 1200, y = 900, worldWidth = 2400, worldHeight = 1800) {
     // Position & Velocity
     this.x = x;
     this.y = y;
@@ -12,20 +12,30 @@ export class PlayerController {
     this.vy = 0;
     this.radius = 15;
 
+    // World bounds
+    this.worldWidth  = worldWidth;
+    this.worldHeight = worldHeight;
+
     // Stats
     this.hp = 100;
     this.maxHp = 100;
     this.speed = 150;
 
+    // Progression
+    this.level = 1;
+    this.xp    = 0;
+    // Total XP needed to reach each level threshold (index = level number)
+    this._xpTable = [0, 50, 120, 240, 420, 660, 980, 1400, 1950, 2600, 9999];
+
     // Equipment
-    this.equippedElement = null; // Element ID string
-    this.color = '#FF6347'; // Red by default
+    this.equippedElement = null;
+    this.color = '#FF6347';
 
     // State
-    this.isAlive = true;
+    this.isAlive   = true;
     this.castPulse = 0;
     this.castColor = '#FFFFFF';
-    // Knockback (separado del input, decae rápido)
+    // Knockback
     this.kbx = 0;
     this.kby = 0;
   }
@@ -48,48 +58,46 @@ export class PlayerController {
     this.x += (this.vx + this.kbx) * dt;
     this.y += (this.vy + this.kby) * dt;
 
-    // Clamp to canvas bounds
-    const canvasWidth = 800;
-    const canvasHeight = 600;
-
-    this.x = Math.max(this.radius, Math.min(canvasWidth - this.radius, this.x));
-    this.y = Math.max(this.radius, Math.min(canvasHeight - this.radius, this.y));
+    // Clamp to world bounds
+    this.x = Math.max(this.radius, Math.min(this.worldWidth  - this.radius, this.x));
+    this.y = Math.max(this.radius, Math.min(this.worldHeight - this.radius, this.y));
 
     // Decay cast pulse effect.
     this.castPulse = Math.max(0, this.castPulse - dt * 2.8);
   }
 
   // ========== DRAWING ==========
-  draw(ctx) {
+  draw(ctx, camera = null) {
     if (!this.isAlive) return;
+    const sx = this.x - (camera ? camera.x : 0);
+    const sy = this.y - (camera ? camera.y : 0);
 
-    // Draw player circle
+    // Player circle
     ctx.fillStyle = this.color;
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.arc(sx, sy, this.radius, 0, Math.PI * 2);
     ctx.fill();
 
-    // Cast feedback ring.
+    // Cast feedback ring
     if (this.castPulse > 0) {
       ctx.save();
       ctx.globalAlpha = this.castPulse;
       ctx.strokeStyle = this.castColor;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 8 + (1 - this.castPulse) * 10, 0, Math.PI * 2);
+      ctx.arc(sx, sy, this.radius + 8 + (1 - this.castPulse) * 10, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
 
-    // Draw health bar above player
-    this.drawHealthBar(ctx);
+    this.drawHealthBar(ctx, sx, sy);
   }
 
-  drawHealthBar(ctx) {
+  drawHealthBar(ctx, sx, sy) {
     const barWidth = 40;
     const barHeight = 5;
-    const barX = this.x - barWidth / 2;
-    const barY = this.y - this.radius - 12;
+    const barX = sx - barWidth / 2;
+    const barY = sy - this.radius - 12;
 
     // Background (gray)
     ctx.fillStyle = '#333333';
@@ -165,6 +173,27 @@ export class PlayerController {
     const angle = Math.atan2(this.y - fromY, this.x - fromX);
     this.kbx = Math.cos(angle) * force;
     this.kby = Math.sin(angle) * force;
+  }
+
+  // ========== PROGRESSION ==========
+  gainXP(amount) {
+    this.xp += amount;
+    while (this.level < 10 && this.xp >= this._xpTable[this.level]) {
+      this.level++;
+      this.maxHp = Math.min(150, this.maxHp + 10);
+      this.hp    = this.maxHp;
+    }
+  }
+
+  get xpToNext() {
+    return this._xpTable[Math.min(this.level, 10)];
+  }
+
+  get xpProgress() {
+    if (this.level >= 10) return 1;
+    const prev = this._xpTable[this.level - 1] || 0;
+    const next = this._xpTable[this.level];
+    return Math.max(0, Math.min(1, (this.xp - prev) / (next - prev)));
   }
 
   // ========== COLLISION ==========

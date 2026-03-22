@@ -8,8 +8,10 @@ import { gameState } from './src/core/GameState.js';
 import EntityManager from './src/core/Entity.js';
 import PlayerController from './src/core/PlayerController.js';
 import CombatEngine from './src/core/CombatEngine.js';
-import ElementManager from './src/core/ElementManager.js';
 import HotbarSystem from './src/core/HotbarSystem.js';
+import Camera     from './src/core/Camera.js';
+import WorldMap   from './src/core/WorldMap.js';
+import InventoryUI from './src/core/InventoryUI.js';
 
 // Canvas setup
 const canvas = document.querySelector('canvas');
@@ -18,11 +20,20 @@ canvas.width = 800;
 canvas.height = 600;
 
 // Initialize systems
-const player = new PlayerController(400, 300);
-const entityManager = new EntityManager();
-const combatEngine = new CombatEngine(GAME_DATA);
-const elementManager = new ElementManager(GAME_DATA);
+// World dimensions
+const WORLD_W = GAME_DATA.world.width;
+const WORLD_H = GAME_DATA.world.height;
+
+// Initialize world and view systems
+const camera    = new Camera(WORLD_W, WORLD_H, 800, 600);
+const worldMap  = new WorldMap(GAME_DATA.world);
+
+// Initialize game systems
+const player        = new PlayerController(WORLD_W / 2, WORLD_H / 2, WORLD_W, WORLD_H);
+const entityManager = new EntityManager(GAME_DATA);
+const combatEngine  = new CombatEngine(GAME_DATA, WORLD_W, WORLD_H);
 const hotbarSystem = new HotbarSystem(GAME_DATA, gameState);
+const inventoryUI  = new InventoryUI(GAME_DATA, gameState, player);
 
 // Input state
 const input = { w: false, a: false, s: false, d: false, mouseX: 400, mouseY: 300 };
@@ -43,9 +54,16 @@ window.addEventListener('keydown', (e) => {
   if (key === 's') input.s = true;
   if (key === 'd') input.d = true;
 
-  // Space spawns enemies at cursor position.
+  // Space spawns enemy at cursor position (world coords).
   if (key === ' ') {
-    entityManager.spawnEnemy(input.mouseX, input.mouseY);
+    const wp = camera.toWorld(input.mouseX, input.mouseY);
+    entityManager.spawnEnemy(wp.x, wp.y);
+    return;
+  }
+
+  // I toggles inventory.
+  if (key === 'i') {
+    inventoryUI.toggle();
     return;
   }
 
@@ -74,6 +92,9 @@ canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
+  const worldPos = camera.toWorld(clickX, clickY);
+  const worldX = worldPos.x;
+  const worldY = worldPos.y;
 
   // Check if clicked on hotbar
   const slotClicked = hotbarSystem.getSlotAtMouse(clickX, clickY, canvas);
@@ -88,7 +109,7 @@ canvas.addEventListener('click', (e) => {
   if (abilityId) {
     for (const enemy of entityManager.enemies) {
       const dist = Math.sqrt(
-        Math.pow(enemy.x - clickX, 2) + Math.pow(enemy.y - clickY, 2)
+        Math.pow(enemy.x - worldX, 2) + Math.pow(enemy.y - worldY, 2)
       );
       if (dist < 40) {
         const castSuccess = combatEngine.executeAbility(
@@ -119,7 +140,7 @@ canvas.addEventListener('click', (e) => {
       const castSuccess = combatEngine.executeAbility(
         abilityId,
         { playerStats: gameState.playerStats, x: player.x, y: player.y },
-        { x: clickX, y: clickY, vx: 0, vy: 0 },
+        { x: worldX, y: worldY, vx: 0, vy: 0 },
         gameState
       );
 
@@ -139,6 +160,18 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
+canvas.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const clickX = e.clientX - rect.left;
+  const clickY = e.clientY - rect.top;
+  const worldPos = camera.toWorld(clickX, clickY);
+  const result = worldMap.harvestTreeAt(worldPos.x, worldPos.y, player.x, player.y, 95);
+  if (result && result.fell) {
+    gameState.notify('Tree felled: +Wood +XP', '#AAFF99', 0.9);
+  }
+});
+
 // ========== UPDATE FUNCTION ==========
 function update(dt) {
   gameState.updateResources(dt);
@@ -146,7 +179,21 @@ function update(dt) {
   gameState.updateCooldowns(dt);
 
   player.update(dt, input);
-  entityManager.update(dt, input, player);
+  camera.follow(player);
+  worldMap.update(dt);
+  entityManager.update(dt, input, player, worldMap);
+
+  // Auto-pickup nearby drops
+  const drops = worldMap.collectDrops(player, 36);
+  for (const d of drops) {
+    if (d.type === 'xp') {
+      player.gainXP(d.value || 0);
+    } else {
+      gameState.addItem(d.type, d.value || 1);
+      gameState.notify(`Picked up: ${d.type} x${d.value || 1}`, '#DDEEFF', 0.5);
+    }
+  }
+
   combatEngine.updateProjectiles(dt, entityManager.enemies);
   combatEngine.updateSlashes(dt, entityManager.enemies);
   combatEngine.updateParticles(dt);
@@ -163,19 +210,19 @@ function update(dt) {
 
 // ========== DRAW FUNCTION ==========
 function draw() {
-  // Clear
-  ctx.fillStyle = '#0a0a1a';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Draw world background + world objects
+  worldMap.drawBackground(ctx, camera);
+  worldMap.drawObjects(ctx, camera);
 
   // Draw entities
-  entityManager.draw(ctx);
-  player.draw(ctx);
+  entityManager.draw(ctx, camera);
+  player.draw(ctx, camera);
 
   // Draw combat effects
-  combatEngine.drawSlashes(ctx);
-  combatEngine.drawProjectiles(ctx);
-  combatEngine.drawParticles(ctx);
-  combatEngine.drawFloats(ctx);
+  combatEngine.drawSlashes(ctx, camera);
+  combatEngine.drawProjectiles(ctx, camera);
+  combatEngine.drawParticles(ctx, camera);
+  combatEngine.drawFloats(ctx, camera);
 
   // Draw HUD
   ctx.fillStyle = '#FFFFFF';
@@ -183,8 +230,9 @@ function draw() {
   ctx.fillText(`HP: ${Math.ceil(player.hp)}/${player.maxHp}`, 10, 20);
   ctx.fillText(`Mana: ${gameState.playerStats.mana.toFixed(0)}/${gameState.playerStats.maxMana}`, 10, 40);
   ctx.fillText(`Enemies: ${entityManager.enemies.length}`, 10, 60);
-  ctx.fillText(`Elements: ${elementManager.unlockedElements.join(', ') || 'None'}`, 10, 80);
-  ctx.fillText(`FPS: ${Math.round(1 / deltaTime)}`, 10, 100);
+  ctx.fillText(`Lv: ${player.level}  XP: ${player.xp}/${player.xpToNext}`, 10, 80);
+  ctx.fillText(`Items: ${Object.keys(gameState.inventory.items).length}`, 10, 100);
+  ctx.fillText(`FPS: ${Math.round(1 / Math.max(0.0001, deltaTime))}`, 10, 120);
 
   // Cast feedback in HUD
   if (castHudFlash > 0) {
@@ -214,7 +262,7 @@ function draw() {
   gameState.notifications.forEach((notif, index) => {
     ctx.fillStyle = notif.color;
     ctx.globalAlpha = 1 - (notif.elapsed / notif.duration);
-    ctx.fillText(notif.message, 10, 120 + index * 20);
+    ctx.fillText(notif.message, 10, 140 + index * 20);
     ctx.globalAlpha = 1;
   });
 
@@ -225,6 +273,25 @@ function draw() {
   ctx.fillStyle = '#00FF00';
   ctx.font = 'bold 12px Arial';
   ctx.fillText(`Selected: Slot ${selectedSlot + 1}`, canvas.width - 200, 20);
+
+  // Inventory panel (screen-space)
+  inventoryUI.draw(ctx, canvas);
+
+  // Mini map
+  const mapW = 140;
+  const mapH = 100;
+  const mapX = canvas.width - mapW - 12;
+  const mapY = canvas.height - mapH - 12;
+  ctx.fillStyle = 'rgba(5, 10, 15, 0.85)';
+  ctx.fillRect(mapX, mapY, mapW, mapH);
+  ctx.strokeStyle = 'rgba(160, 200, 255, 0.45)';
+  ctx.strokeRect(mapX, mapY, mapW, mapH);
+  const px = mapX + (player.x / WORLD_W) * mapW;
+  const py = mapY + (player.y / WORLD_H) * mapH;
+  ctx.fillStyle = '#66FF88';
+  ctx.beginPath();
+  ctx.arc(px, py, 3, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 // ========== GAME LOOP ==========
@@ -241,8 +308,8 @@ function gameLoop(currentTime) {
 
 // ========== INIT ==========
 function init() {
-  console.log('Game initialized - Fase 2');
-  console.log('WASD to move, SPACE spawns enemy at cursor, click to cast, hotbar slots via keyboard (1-6) or click');
+  console.log('Game initialized - Fase 3');
+  console.log('WASD move, I inventory, right-click trees to harvest, SPACE spawns enemy at cursor, click to cast');
   gameState.equipAbility(0, 'basicAttack');
   gameState.equipAbility(1, 'fireball');
   requestAnimationFrame(gameLoop);

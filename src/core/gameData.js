@@ -1,4 +1,19 @@
 export const GAME_DATA = {
+  world: {
+    width:      2400,
+    height:     1800,
+    treeCount:  42,
+    rockCount:  28,
+    seed:       1337
+  },
+  items: [
+    { id: 'wood',          name: 'Wood',         color: '#8B4513' },
+    { id: 'stone',         name: 'Stone',        color: '#888888' },
+    { id: 'goblin_fang',   name: 'Goblin Fang',  color: '#FFD700' },
+    { id: 'orc_hide',      name: 'Orc Hide',     color: '#8B2020' },
+    { id: 'bone',          name: 'Bone',         color: '#DDDDC8' },
+    { id: 'crystal_shard', name: 'Crystal Shard',color: '#CC44FF' }
+  ],
   elements: [
     { id: 'fire', name: 'Fire', nameColor: '#FF4500', accentColor: '#FF6347', epithet: 'The Burning' },
     { id: 'water', name: 'Water', nameColor: '#1E90FF', accentColor: '#00BFFF', epithet: 'The Flowing' },
@@ -58,9 +73,9 @@ export const GAME_DATA = {
     { id: 'crystal', name: 'Crystal', rarity: 'rare', color: '#FF00FF' }
   ],
   enemyTypes: [
-    { id: 'goblin', name: 'Goblin', baseHp: 15, baseDamage: 3, speed: 80, size: 15, color: '#228B22' },
-    { id: 'orc', name: 'Orc', baseHp: 30, baseDamage: 6, speed: 60, size: 20, color: '#8B0000' },
-    { id: 'skeleton', name: 'Skeleton', baseHp: 20, baseDamage: 4, speed: 70, size: 16, color: '#FFFFFF' }
+    { id: 'goblin',   name: 'Goblin',   baseHp:  40, attackDamage:  6, speed:  80, radius: 12, color: '#3aab3a', xpValue: 10, lootItem: 'goblin_fang', lootChance: 0.35 },
+    { id: 'orc',      name: 'Orc',      baseHp: 120, attackDamage: 15, speed:  48, radius: 19, color: '#8B0000', xpValue: 35, lootItem: 'orc_hide',    lootChance: 0.50 },
+    { id: 'skeleton', name: 'Skeleton', baseHp:  65, attackDamage: 10, speed:  62, radius: 13, color: '#DDDDC8', xpValue: 22, lootItem: 'bone',         lootChance: 0.55 }
   ]
 };
 
