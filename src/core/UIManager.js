@@ -594,10 +594,10 @@ export class UIManager {
     usageTypeRow.appendChild(usageSelect);
     panel.appendChild(usageTypeRow);
 
-    const selectedBlock = document.createElement('div');
-    selectedBlock.style.cssText = 'margin-top:12px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px';
-    selectedBlock.innerHTML = selected ? `<strong>Selected Slot: ${selected.name}</strong><br><span style="opacity:0.75">${selected.elementId} · ${selected.branchId} · ${selected.type}</span><br><span style="opacity:0.75">${selected.description}</span>` : 'Selected Slot: Empty';
-    panel.appendChild(selectedBlock);
+    // const selectedBlock = document.createElement('div');
+    // selectedBlock.style.cssText = 'margin-top:12px;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:8px';
+    // selectedBlock.innerHTML = selected ? `<strong>Selected Slot: ${selected.name}</strong><br><span style="opacity:0.75">${selected.elementId} · ${selected.branchId} · ${selected.type}</span><br><span style="opacity:0.75">${selected.description}</span>` : 'Selected Slot: Empty';
+    // panel.appendChild(selectedBlock);
 
     const summary = document.createElement('div');
     summary.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px';
@@ -704,7 +704,7 @@ export class UIManager {
     ctx.fillText(`Build: ${this.gameState.buildState.buildName}`, 12, y + 14);
     ctx.fillText(`Kills: ${this.gameState.runStats.kills}`, 12, y + 32);
     if (selectedAbility) {
-      ctx.fillText(`Selected: ${selectedAbility.name}`, 12, y + 50);
+    //   ctx.fillText(`Selected: ${selectedAbility.name}`, 12, y + 50);
     }
     if (this.gameState.buildState.synergyLabels.length > 0) {
       ctx.fillText(`Synergy: ${this.gameState.buildState.synergyLabels[0]}`, 12, y + 68);
@@ -724,9 +724,7 @@ export class UIManager {
       ctx.fillStyle = 'rgba(10,14,24,0.9)';
       ctx.fillRect(x, hudStartY, 34, 34);
       if (slot?.id) ctx.drawImage(icon, x, hudStartY);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '10px sans-serif';
-      ctx.fillText(this.slotKeyLabel(index), x, hudStartY + 44);
+      // Slot key labels removed — they overlapped the day/night indicator.
     });
 
     const boss = entityManager.enemies.find((enemy) => enemy.typeId === 'boss');

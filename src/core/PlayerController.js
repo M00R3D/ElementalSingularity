@@ -38,6 +38,7 @@ export class PlayerController {
     // Knockback
     this.kbx = 0;
     this.kby = 0;
+    this.limbPhase = 0; // for hands/feet animation
   }
 
   // ========== MOVEMENT ==========
@@ -64,6 +65,9 @@ export class PlayerController {
 
     // Decay cast pulse effect.
     this.castPulse = Math.max(0, this.castPulse - dt * 2.8);
+    // advance limb animation phase based on movement speed
+    const moveSpeed = Math.hypot(this.vx, this.vy);
+    this.limbPhase += dt * (1 + moveSpeed / 80) * 6;
   }
 
   // ========== DRAWING ==========
@@ -89,6 +93,20 @@ export class PlayerController {
       ctx.stroke();
       ctx.restore();
     }
+
+    // Draw simple limbs: 4 small circles (hands/feet) animated
+    const phase = this.limbPhase || 0;
+    const swing = Math.sin(phase) * 4;
+    const offset = this.radius + 8;
+    // left arm (upper-left)
+    ctx.fillStyle = this.castColor || '#FFFFFF';
+    ctx.beginPath(); ctx.arc(sx - offset + swing, sy - offset - swing * 0.5, 4, 0, Math.PI * 2); ctx.fill();
+    // right arm (upper-right)
+    ctx.beginPath(); ctx.arc(sx + offset - swing, sy - offset + swing * 0.5, 4, 0, Math.PI * 2); ctx.fill();
+    // left leg (lower-left)
+    ctx.beginPath(); ctx.arc(sx - offset + swing * 0.5, sy + offset - swing, 4, 0, Math.PI * 2); ctx.fill();
+    // right leg (lower-right)
+    ctx.beginPath(); ctx.arc(sx + offset - swing * 0.5, sy + offset + swing, 4, 0, Math.PI * 2); ctx.fill();
 
     this.drawHealthBar(ctx, sx, sy);
   }

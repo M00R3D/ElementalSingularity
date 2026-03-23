@@ -8,9 +8,10 @@ export class EntityManager {
     this.height     = 1800;
     this.particles  = [];
     this._spawnTimer = 0;
+    this._nightCooldown = 0; // cooldown between night-group spawns
   }
 
-  update(dt, input, realPlayer = null, worldMap = null) {
+  update(dt, input, realPlayer = null, worldMap = null, dayNightCycle = null) {
     this.player.vx = 0;
     this.player.vy = 0;
 
@@ -51,6 +52,9 @@ export class EntityManager {
       enemy.x += enemy.vx * dt;
       enemy.y += enemy.vy * dt;
 
+      // Limb animation phase for simple hands/feet movement
+      enemy.limbPhase = (enemy.limbPhase || 0) + dt * (enemy.limbSpeed || 6);
+
       // Burn tick damage while the status is active.
       if (enemy.burnTime > 0) {
         enemy.burnTime = Math.max(0, enemy.burnTime - dt);
@@ -78,23 +82,36 @@ export class EntityManager {
         enemy.vy = -Math.abs(enemy.vy);
       }
 
-      // Homing hacia el jugador.
+      // Movement: compute common vectors
       const tx = target.x - enemy.x;
       const ty = target.y - enemy.y;
       const tdist = Math.hypot(tx, ty) || 1;
       const maxSpd = enemy.speed || 85;
-      enemy.vx += (tx / tdist) * (maxSpd * 0.65) * dt;
-      enemy.vy += (ty / tdist) * (maxSpd * 0.65) * dt;
+
+      // Passive animals wander; hostiles home to target
+      if (enemy.passive) {
+        // gentle wandering motion
+        enemy.wanderPhase = (enemy.wanderPhase || 0) + dt * 0.8;
+        const wobble = Math.sin(enemy.wanderPhase) * 8;
+        enemy.x += Math.cos(enemy.wanderPhase) * (enemy.speed || 20) * dt * 0.28 + (Math.random() - 0.5) * 6 * dt;
+        enemy.y += Math.sin(enemy.wanderPhase) * (enemy.speed || 20) * dt * 0.28 + (Math.random() - 0.5) * 6 * dt;
+      } else {
+        // Homing hacia el jugador.
+        enemy.vx += (tx / tdist) * (maxSpd * 0.65) * dt;
+        enemy.vy += (ty / tdist) * (maxSpd * 0.65) * dt;
+      }
       const spd = Math.hypot(enemy.vx, enemy.vy);
       if (spd > maxSpd) { enemy.vx = (enemy.vx / spd) * maxSpd; enemy.vy = (enemy.vy / spd) * maxSpd; }
 
-      // Ataque del enemigo al jugador con cooldown.
-      enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
-      if (tdist <= (enemy.attackRange || 26) && enemy.attackCooldown <= 0 && target.takeDamage) {
-        target.takeDamage(enemy.attackDamage || 6);
-        if (target.applyKnockback) target.applyKnockback(enemy.x, enemy.y, 270);
-        enemy.attackCooldown = enemy.attackCooldownMax || 1.5;
-        enemy.attackFlash = 0.45;
+      // Ataque del enemigo al jugador con cooldown (hostiles only)
+      if (!enemy.passive) {
+        enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
+        if (tdist <= (enemy.attackRange || 26) && enemy.attackCooldown <= 0 && target.takeDamage) {
+          target.takeDamage(enemy.attackDamage || 6);
+          if (target.applyKnockback) target.applyKnockback(enemy.x, enemy.y, 270);
+          enemy.attackCooldown = enemy.attackCooldownMax || 1.5;
+          enemy.attackFlash = 0.45;
+        }
       }
       enemy.attackFlash = Math.max(0, (enemy.attackFlash || 0) - dt * 3.5);
 
@@ -113,18 +130,53 @@ export class EntityManager {
       }
     }
 
-    // Auto-spawn enemies around the player at intervals
+    // Auto-spawn entities around the player at intervals.
+    // Daytime: occasional passive animals. Nighttime: spawn hostiles in groups (2-3) with a 10s cooldown.
+    // Reduce night cooldown timer
+    this._nightCooldown = Math.max(0, (this._nightCooldown || 0) - dt);
     this._spawnTimer += dt;
-    const spawnInterval = this.enemies.length < 5 ? 2 : 5;
-    if (this._spawnTimer >= spawnInterval && this.enemies.length < this.maxEnemies) {
-      this._spawnTimer = 0;
-      const spawnTarget = realPlayer || this.player;
-      const angle = Math.random() * Math.PI * 2;
-      const dist  = 350 + Math.random() * 150;
-      const spawnX = Math.max(30, Math.min(this.width  - 30, spawnTarget.x + Math.cos(angle) * dist));
-      const spawnY = Math.max(30, Math.min(this.height - 30, spawnTarget.y + Math.sin(angle) * dist));
-      const pool = ['goblin', 'goblin', 'goblin', 'skeleton', 'orc'];
-      this.spawnEnemy(spawnX, spawnY, pool[Math.floor(Math.random() * pool.length)]);
+    const daySpawnInterval = this.enemies.length < 5 ? 2 : 5;
+
+    const spawnTarget = realPlayer || this.player;
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = 350 + Math.random() * 150;
+    const baseX = Math.max(30, Math.min(this.width  - 30, spawnTarget.x + Math.cos(angle) * dist));
+    const baseY = Math.max(30, Math.min(this.height - 30, spawnTarget.y + Math.sin(angle) * dist));
+
+    if (dayNightCycle && dayNightCycle.isNight) {
+      // Night: spawn groups of 2-3 hostiles every 10 seconds (if under cap)
+      // Count only hostile enemies for the night cap (exclude passive animals)
+      const nightCap = Math.min(this.maxEnemies, 10);
+      let currentHostiles = this.enemies.filter(e => !e.passive).length;
+      if (this._nightCooldown <= 0 && currentHostiles < nightCap) {
+        const groupCount = Math.random() < 0.5 ? 2 : 3;
+        let spawned = 0;
+        for (let g = 0; g < groupCount; g++) {
+          if (currentHostiles >= nightCap || this.enemies.length >= this.maxEnemies) break;
+          // spread each member slightly
+          const a = angle + (g - (groupCount-1)/2) * 0.5;
+          const r = dist + (Math.random() - 0.5) * 40;
+          const sx = Math.max(30, Math.min(this.width - 30, spawnTarget.x + Math.cos(a) * r));
+          const sy = Math.max(30, Math.min(this.height - 30, spawnTarget.y + Math.sin(a) * r));
+          const pool = ['goblin', 'goblin', 'goblin', 'skeleton', 'orc'];
+          const typeId = pool[Math.floor(Math.random() * pool.length)];
+          this.spawnEnemy(sx, sy, typeId);
+          spawned++;
+          currentHostiles++;
+        }
+        if (spawned > 0) {
+          this._nightCooldown = 10.0;
+          this._spawnTimer = 0;
+        }
+      }
+    } else {
+      // Day: occasional passive animals using existing day interval
+      if (this._spawnTimer >= daySpawnInterval && this.enemies.length < this.maxEnemies) {
+        this._spawnTimer = 0;
+        const pool = ['cow', 'chicken'];
+        const typeId = pool[Math.floor(Math.random() * pool.length)];
+        this.spawnEnemy(baseX, baseY, typeId);
+      }
     }
 
     // Update burn particles
@@ -155,6 +207,20 @@ export class EntityManager {
       ctx.fillStyle = enemy.color;
       ctx.beginPath();
       ctx.arc(sx, sy, enemy.radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw simple limb indicators (hands and feet)
+      const phase = enemy.limbPhase || 0;
+      const armOffsetY = Math.sin(phase) * 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath();
+      ctx.arc(sx - enemy.radius - 6, sy + armOffsetY, 4, 0, Math.PI * 2);
+      ctx.arc(sx + enemy.radius + 6, sy - armOffsetY, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.beginPath();
+      ctx.arc(sx - 5, sy + enemy.radius + 5 + Math.abs(Math.sin(phase)) * 1.5, 3.5, 0, Math.PI * 2);
+      ctx.arc(sx + 5, sy + enemy.radius + 5 - Math.abs(Math.sin(phase)) * 1.5, 3.5, 0, Math.PI * 2);
       ctx.fill();
 
       if (enemy.burnTime > 0) {
@@ -228,6 +294,13 @@ export class EntityManager {
       color,
       maxHp: hp,
       hp,
+      limbPhase: Math.random() * Math.PI * 2,
+      limbSpeed: 4 + Math.random() * 6,
+      // passive flag for animals
+      passive: (typeId === 'cow' || typeId === 'chicken'),
+      wanderPhase: Math.random() * Math.PI * 2,
+      // ensure animals are slower
+      speed: (typeId === 'cow' ? 28 : (typeId === 'chicken' ? 46 : speed)),
       speed,
       dead:     false,
       _dropped: false,

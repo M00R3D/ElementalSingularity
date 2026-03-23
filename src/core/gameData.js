@@ -81,6 +81,8 @@ export const GAME_DATA = {
     { id: 'goblin',   name: 'Goblin',   baseHp:  40, attackDamage:  6, speed:  80, radius: 12, color: '#3aab3a', xpValue: 10, lootItem: 'goblin_fang', lootChance: 0.35 },
     { id: 'orc',      name: 'Orc',      baseHp: 120, attackDamage: 15, speed:  48, radius: 19, color: '#8B0000', xpValue: 35, lootItem: 'orc_hide',    lootChance: 0.50 },
     { id: 'skeleton', name: 'Skeleton', baseHp:  65, attackDamage: 10, speed:  62, radius: 13, color: '#DDDDC8', xpValue: 22, lootItem: 'bone',         lootChance: 0.55 }
+    ,{ id: 'cow',      name: 'Cow',      baseHp:  30, attackDamage: 0,  speed:  28, radius: 14, color: '#BEA56A', xpValue: 1,  lootItem: null,        lootChance: 0 }
+    ,{ id: 'chicken',  name: 'Chicken',  baseHp:  12, attackDamage: 0,  speed:  46, radius: 8,  color: '#FFF1A8', xpValue: 0,  lootItem: null,        lootChance: 0 }
   ]
 };
 

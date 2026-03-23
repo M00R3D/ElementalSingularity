@@ -78,10 +78,27 @@ window.addEventListener('keydown', (e) => {
     if (key === 'arrowup' || key === 'w') worldSelectMenu.handleKeyPress('arrowup');
     if (key === 'arrowdown' || key === 's') worldSelectMenu.handleKeyPress('arrowdown');
     if (key === 'enter') {
-      worldSelectMenu.selectWorld();
+      const selectedId = worldSelectMenu.selectWorld();
       gameStarted = true;
+      // Spawn initial passive mobs for the world (10 cows, 4 chickens)
+      try {
+        const cfg = worldManager.getCurrentWorldConfig();
+        const spawnX = cfg.spawnX || WORLD_W / 2;
+        const spawnY = cfg.spawnY || WORLD_H / 2;
+        for (let i = 0; i < 10; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const dist = 24 + Math.random() * 220;
+          entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'cow');
+        }
+        for (let i = 0; i < 4; i++) {
+          const ang = Math.random() * Math.PI * 2;
+          const dist = 24 + Math.random() * 160;
+          entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'chicken');
+        }
+      } catch (e) {
+        // ignore if worldManager not available
+      }
     }
-    return;
   }
 
   // Normal gameplay input
@@ -486,7 +503,28 @@ canvas.addEventListener('contextmenu', (e) => {
 
 // ========== UPDATE FUNCTION ==========
 function update(dt) {
-  if (!gameStarted) return;
+  // If world was just selected (via GUI click), initialize passive mobs and start game
+  if (!gameStarted) {
+    if (worldManager._justChanged) {
+      const cfg = worldManager.getCurrentWorldConfig();
+      const spawnX = cfg.spawnX || WORLD_W / 2;
+      const spawnY = cfg.spawnY || WORLD_H / 2;
+      for (let i = 0; i < 10; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 24 + Math.random() * 220;
+        entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'cow');
+      }
+      for (let i = 0; i < 4; i++) {
+        const ang = Math.random() * Math.PI * 2;
+        const dist = 24 + Math.random() * 160;
+        entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'chicken');
+      }
+      worldManager._justChanged = null;
+      gameStarted = true;
+    } else {
+      return;
+    }
+  }
 
   // Update day/night cycle
   dayNightCycle.update(dt);
@@ -502,21 +540,9 @@ function update(dt) {
   camera.follow(player);
   worldMap.update(dt);
   
-  // Update entity spawning based on day/night
-  const spawnRate = worldManager.getEnemySpawnRate(dayNightCycle);
-  entityManager._spawnTimer += dt;
-  const spawnInterval = 1 / spawnRate; // Convert rate to interval
-  if (entityManager._spawnTimer >= spawnInterval && entityManager.enemies.length < entityManager.maxEnemies) {
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 350 + Math.random() * 150;
-    const spawnX = player.x + Math.cos(angle) * distance;
-    const spawnY = player.y + Math.sin(angle) * distance;
-    const typeId = ['goblin', 'skeleton', 'orc'][Math.floor(Math.random() * 3)];
-    entityManager.spawnEnemy(spawnX, spawnY, typeId);
-    entityManager._spawnTimer = 0;
-  }
+  // EntityManager handles spawning (day passive animals, night hostile groups)
   
-  entityManager.update(dt, input, player, worldMap);
+  entityManager.update(dt, input, player, worldMap, dayNightCycle);
 
   // Auto-pickup nearby drops
   const drops = worldMap.collectDrops(player, 36);
@@ -662,11 +688,7 @@ function draw() {
   // Draw hotbar
   hotbarSystem.draw(ctx, canvas, selectedSlot);
 
-  // Draw selected slot indicator
-  ctx.fillStyle = '#00FF00';
-  ctx.font = 'bold 12px Arial';
-  ctx.textAlign = 'right';
-  ctx.fillText(`Selected: Slot ${selectedSlot + 1}`, canvas.width - 20, 20);
+  // Selected slot HUD removed to avoid overlapping day/night indicator
 
   // Inventory panel (screen-space)
   inventoryUI.draw(ctx, canvas);

@@ -83,6 +83,8 @@ export class WorldManager {
   setCurrentWorld(worldId) {
     if (this.worlds[worldId]) {
       this.currentWorldId = worldId;
+      // mark for one-time initialization (consumed by main game loop)
+      this._justChanged = worldId;
       return true;
     }
     return false;
@@ -95,11 +97,12 @@ export class WorldManager {
   getEnemySpawnRate(dayNightCycle) {
     const config = this.getCurrentWorldConfig();
     const baseRate = config.baseEnemySpawnsPerSecond;
-    
+    // Reduce daytime spawn rate substantially (very rare during day)
+    const dayMultiplier = 0.06; // 6% of base during day
     if (dayNightCycle.isNight) {
       return baseRate * config.nightEnemyMultiplier;
     }
-    return baseRate;
+    return Math.max(0.001, baseRate * dayMultiplier);
   }
 }
 
