@@ -10,6 +10,7 @@ export class WorldMap {
     this.trees  = [];
     this.rocks  = [];
     this.drops  = [];
+    this.puddles = [];
     this._generate(config.seed || 1337, config.treeCount || 40, config.rockCount || 25);
   }
 
@@ -42,7 +43,7 @@ export class WorldMap {
       }
       if (overlap) continue;
 
-      this.trees.push({ x, y, hp: 3, maxHp: 3, radius: 22, state: 'alive', hitFlash: 0 });
+      this.trees.push({ x, y, hp: 3, maxHp: 3, radius: 22, state: 'alive', hitFlash: 0, leaflessTime: 0 });
     }
 
     // Rocks
@@ -69,6 +70,7 @@ export class WorldMap {
   update(dt) {
     for (const tree of this.trees) {
       if (tree.hitFlash > 0) tree.hitFlash -= dt * 5;
+      tree.leaflessTime = Math.max(0, (tree.leaflessTime || 0) - dt);
       if (tree.fireParticles) {
         for (let i = tree.fireParticles.length - 1; i >= 0; i--) {
           const p = tree.fireParticles[i];
@@ -84,8 +86,85 @@ export class WorldMap {
     for (const drop of this.drops) {
       if (!drop.collected) drop._t = ((drop._t || 0) + dt);
     }
+    for (let i = this.puddles.length - 1; i >= 0; i--) {
+      const puddle = this.puddles[i];
+      puddle.life -= dt;
+      puddle.t = (puddle.t || 0) + dt;
+      if (puddle.life <= 0) this.puddles.splice(i, 1);
+    }
     // Remove collected drops immediately (tiny perf)
     this.drops = this.drops.filter(d => !d.collected);
+  }
+
+  spawnWaterPuddle(x, y, radius = 28, duration = 4.5, friction = 0.92, slipDuration = 1.8) {
+    this.puddles.push({
+      x,
+      y,
+      radius: Math.max(14, Math.min(56, radius || 28)),
+      life: Math.max(0.5, duration || 4.5),
+      maxLife: Math.max(0.5, duration || 4.5),
+      friction: Math.max(0.82, Math.min(0.98, friction || 0.92)),
+      slipDuration: Math.max(0.3, slipDuration || 1.8),
+      t: 0
+    });
+  }
+
+  extinguishTreesInRadius(x, y, radius = 34) {
+    let count = 0;
+    for (const tree of this.trees) {
+      if (tree.state !== 'burning') continue;
+      if (Math.hypot(tree.x - x, tree.y - y) > radius + (tree.radius || 0) * 0.6) continue;
+      tree.state = 'alive';
+      tree.burnDuration = 0;
+      tree.fireParticles = [];
+      tree.color = null;
+      tree.hp = Math.max(1, tree.hp || tree.maxHp || 3);
+      count++;
+    }
+    return count;
+  }
+
+  applyPuddleEffects(player, enemies = [], dt = 0.016) {
+    if (!player) return;
+    for (const puddle of this.puddles) {
+      this.extinguishTreesInRadius(puddle.x, puddle.y, puddle.radius * 0.85);
+
+      const toPX = player.x - puddle.x;
+      const toPY = player.y - puddle.y;
+      const pDist = Math.hypot(toPX, toPY);
+      if (pDist <= (puddle.radius + (player.radius || 12))) {
+        if (typeof player.applySlippery === 'function') {
+          player.applySlippery(puddle.slipDuration, toPX, toPY, 120, puddle.friction);
+        }
+      }
+
+      for (const enemy of enemies) {
+        if (!enemy || enemy.dead) continue;
+        const toEX = enemy.x - puddle.x;
+        const toEY = enemy.y - puddle.y;
+        const eDist = Math.hypot(toEX, toEY);
+        if (eDist <= (puddle.radius + (enemy.radius || 10))) {
+          if ((enemy.burnTime || 0) > 0) {
+            enemy.burnTime = 0;
+            enemy.burnTick = 0;
+          }
+          if (typeof enemy.applySlippery === 'function') {
+            enemy.applySlippery(puddle.slipDuration, toEX, toEY, 95, puddle.friction);
+          }
+        }
+      }
+    }
+  }
+
+  stripLeavesAt(x, y, radius = 120, duration = 12) {
+    let count = 0;
+    for (const tree of this.trees) {
+      if (tree.state !== 'alive') continue;
+      if (Math.hypot(tree.x - x, tree.y - y) > radius + (tree.radius || 0)) continue;
+      tree.leaflessTime = Math.max(tree.leaflessTime || 0, duration);
+      count++;
+    }
+    return count;
   }
 
   // ── Drops ────────────────────────────────────────────────────────────────
@@ -216,6 +295,27 @@ export class WorldMap {
   }
 
   drawObjects(ctx, camera) {
+    // Water puddles (under rocks/trees/entities)
+    for (const puddle of this.puddles) {
+      if (!camera.isVisible(puddle.x, puddle.y, puddle.radius + 6)) continue;
+      const sx = puddle.x - camera.x;
+      const sy = puddle.y - camera.y;
+      const alpha = Math.max(0.18, (puddle.life / puddle.maxLife) * 0.35);
+      const wave = Math.sin((puddle.t || 0) * 3.8) * 1.6;
+
+      ctx.save();
+      ctx.fillStyle = `rgba(55, 150, 255, ${alpha})`;
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, puddle.radius + wave, puddle.radius * 0.58 + wave * 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `rgba(155, 220, 255, ${alpha * 0.7})`;
+      ctx.beginPath();
+      ctx.ellipse(sx - puddle.radius * 0.22, sy - puddle.radius * 0.1, puddle.radius * 0.32, puddle.radius * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
     // Rocks (drawn under trees)
     for (const rock of this.rocks) {
       if (!camera.isVisible(rock.x, rock.y, rock.rx + 5)) continue;
@@ -320,26 +420,40 @@ export class WorldMap {
           ctx.arc(sx, sy - 10, tree.radius + 4, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Canopy outer with small squash when hit
-        ctx.save();
-        ctx.translate(sx, sy - 10);
-        ctx.scale(1 + flash * 0.03, 1 - flash * 0.08);
-        ctx.fillStyle = '#2a5a18';
-        ctx.beginPath();
-        ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
-        ctx.fill();
-        // Canopy highlight
-        ctx.fillStyle = '#3a7a25';
-        ctx.beginPath();
-        ctx.arc(-5, -4, tree.radius * 0.65, 0, Math.PI * 2);
-        ctx.fill();
-        // Canopy edge
-        ctx.strokeStyle = '#1a3a0e';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
+        if ((tree.leaflessTime || 0) > 0) {
+          const barkTone = '#6a3a16';
+          ctx.strokeStyle = barkTone;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy - 6);
+          ctx.lineTo(sx - 9, sy - 20);
+          ctx.moveTo(sx, sy - 8);
+          ctx.lineTo(sx + 8, sy - 18);
+          ctx.moveTo(sx, sy - 13);
+          ctx.lineTo(sx - 4, sy - 25);
+          ctx.stroke();
+        } else {
+          // Canopy outer with small squash when hit
+          ctx.save();
+          ctx.translate(sx, sy - 10);
+          ctx.scale(1 + flash * 0.03, 1 - flash * 0.08);
+          ctx.fillStyle = '#2a5a18';
+          ctx.beginPath();
+          ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
+          ctx.fill();
+          // Canopy highlight
+          ctx.fillStyle = '#3a7a25';
+          ctx.beginPath();
+          ctx.arc(-5, -4, tree.radius * 0.65, 0, Math.PI * 2);
+          ctx.fill();
+          // Canopy edge
+          ctx.strokeStyle = '#1a3a0e';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
         // HP bar (only when damaged)
         if (tree.hp < tree.maxHp) {
           const bw = 36, bx = sx - 18, by = sy - tree.radius - 16;
@@ -360,7 +474,8 @@ export class WorldMap {
       wood: '#8B4513', stone: '#888888', stick: '#A0714F', charcoal: '#1a1a1a',
       burnt_wood: '#3a3a2a', goblin_fang: '#FFD700', orc_hide: '#8B2020', 
       bone: '#DDDDC8', crystal_shard: '#CC44FF', wooden_axe: '#9B6B47',
-      stone_axe: '#7A8B9F'
+      stone_axe: '#7A8B9F', elemental_orb_fire: '#FF6A3D', elemental_orb_water: '#4AA7FF',
+      elemental_orb_air: '#8FD9FF', elemental_orb_earth: '#A47A5A', elemental_orb_lightning: '#FFE45E'
     };
     for (const drop of this.drops) {
       if (drop.collected) continue;

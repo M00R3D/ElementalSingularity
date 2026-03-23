@@ -17,7 +17,12 @@ export const GAME_DATA = {
     { id: 'bone',          name: 'Bone',         color: '#DDDDC8' },
     { id: 'crystal_shard', name: 'Crystal Shard',color: '#CC44FF' },
     { id: 'wooden_axe',    name: 'Wooden Axe',   color: '#9B6B47' },
-    { id: 'stone_axe',     name: 'Stone Axe',    color: '#7A8B9F' }
+    { id: 'stone_axe',     name: 'Stone Axe',    color: '#7A8B9F' },
+    { id: 'elemental_orb_fire', name: 'Fire Orb', color: '#FF6A3D' },
+    { id: 'elemental_orb_water', name: 'Water Orb', color: '#4AA7FF' },
+    { id: 'elemental_orb_air', name: 'Air Orb', color: '#8FD9FF' },
+    { id: 'elemental_orb_earth', name: 'Earth Orb', color: '#A47A5A' },
+    { id: 'elemental_orb_lightning', name: 'Lightning Orb', color: '#FFE45E' }
   ],
   elements: [
     { id: 'fire', name: 'Fire', nameColor: '#FF4500', accentColor: '#FF6347', epithet: 'The Burning' },
@@ -64,11 +69,45 @@ export const GAME_DATA = {
     },
     {
       id: 'waterbolt',    name: 'Water Bolt',    element: 'water',
-      baseDamage: 18,     manaCost: 12,          cooldown: 0.8,    range: 140
+      baseDamage: 16,     manaCost: 14,          cooldown: 1.1,
+      projectile: true,   projectileSpeed: 320,  projectileRadius: 8,
+      projectileLife: 1.6, projectileColor: '#4aa7ff',
+      parabolic: true,
+      arcHeight: 95,
+      waterPuddleDuration: 4.5,
+      waterPuddleRadius: 30,
+      slipperyDuration: 1.8,
+      slipFriction: 0.92,
+      extinguishRadius: 34
     },
     {
       id: 'airslash',     name: 'Air Slash',     element: 'air',
-      baseDamage: 22,     manaCost: 18,          cooldown: 1.2,    range: 130
+      baseDamage: 22,     manaCost: 18,          cooldown: 1.2,    range: 170,
+      gustRadius: 120,
+      leafStripRadius: 140,
+      launchDuration: 1.15,
+      launchUpward: 320,
+      launchForce: 250,
+      spinSpeed: 14,
+      fallDamage: 18
+    },
+    {
+      id: 'lightningChain', name: 'Lightning Chain', element: 'lightning',
+      baseDamage: 34,       manaCost: 32,            cooldown: 7.5,
+      range: 230,
+      chainLightning: true,
+      chainCount: 4,
+      chainRadius: 170,
+      paralyzeDuration: 1.2,
+      projectileColor: '#FFE45E'
+    },
+    {
+      id: 'earthSpike',   name: 'Earth Spike',   element: 'earth',
+      baseDamage: 28,     manaCost: 22,          cooldown: 2.2,
+      earthSpike: true,
+      spikeRadius: 115,
+      spikeKnockback: 200,
+      spikeStunDuration: 0.6
     },
   ],
   materials: [

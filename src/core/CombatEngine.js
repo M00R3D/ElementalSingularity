@@ -12,6 +12,16 @@ export class CombatEngine {
     this.projectiles = [];
     this.slashes = [];
     this.particles = [];
+    this.lightningBeams = [];
+    this._enemyContext = [];
+    this._playerContext = null;
+    this._worldContext = null;
+  }
+
+  setCombatContext(enemies = [], player = null, worldMap = null) {
+    this._enemyContext = enemies || [];
+    this._playerContext = player || null;
+    this._worldContext = worldMap || null;
   }
 
   executeAbility(abilityId, fromPlayer, toTarget, gameState) {
@@ -28,21 +38,49 @@ export class CombatEngine {
       Math.pow(toTarget.y - fromPlayer.y, 2)
     );
 
-    // Slash and projectile abilities are not range-gated.
-    if (!ability.slash && !ability.projectile && distance > (ability.range || 9999)) return false;
-
-    fromPlayer.playerStats.mana -= ability.manaCost;
-    gameState.setCooldown(abilityId, ability.cooldown);
+    // Slash/projectile/chain lightning are not range-gated here.
+    if (!ability.slash && !ability.projectile && !ability.chainLightning && distance > (ability.range || 9999)) return false;
 
     if (ability.slash) {
+      fromPlayer.playerStats.mana -= ability.manaCost;
+      gameState.setCooldown(abilityId, ability.cooldown);
       this.spawnSlash(fromPlayer, toTarget, ability);
       return true;
     }
 
     if (ability.projectile) {
+      fromPlayer.playerStats.mana -= ability.manaCost;
+      gameState.setCooldown(abilityId, ability.cooldown);
       this.spawnProjectile(fromPlayer, toTarget, ability);
       return true;
     }
+
+    if (ability.chainLightning) {
+      const success = this.castChainLightning(fromPlayer, toTarget, ability);
+      if (!success) return false;
+      fromPlayer.playerStats.mana -= ability.manaCost;
+      gameState.setCooldown(abilityId, ability.cooldown);
+      return true;
+    }
+
+    if (ability.id === 'airslash') {
+      const success = this.castAirSlash(fromPlayer, toTarget, ability);
+      if (!success) return false;
+      fromPlayer.playerStats.mana -= ability.manaCost;
+      gameState.setCooldown(abilityId, ability.cooldown);
+      return true;
+    }
+
+    if (ability.earthSpike) {
+      const success = this.castEarthSpike(fromPlayer, toTarget, ability);
+      if (!success) return false;
+      fromPlayer.playerStats.mana -= ability.manaCost;
+      gameState.setCooldown(abilityId, ability.cooldown);
+      return true;
+    }
+
+    fromPlayer.playerStats.mana -= ability.manaCost;
+    gameState.setCooldown(abilityId, ability.cooldown);
 
     const damageDealt = this.calculateDamage(ability);
 
@@ -137,6 +175,10 @@ export class CombatEngine {
       vy: Math.sin(angle) * speed,
       radius,
       life,
+      maxLife: life,
+      z: 0,
+      vz: ability.parabolic ? (ability.arcHeight || 95) : 0,
+      gravity: ability.parabolic ? Math.max(260, (ability.arcHeight || 95) * 2.35) : 0,
       ability
     });
   }
@@ -148,6 +190,11 @@ export class CombatEngine {
       projectile.y += projectile.vy * dt;
       projectile.life -= dt;
 
+      if (projectile.ability.parabolic) {
+        projectile.vz -= (projectile.gravity || 0) * dt;
+        projectile.z = Math.max(0, (projectile.z || 0) + projectile.vz * dt);
+      }
+
       // Emitir partículas de llama si el proyectil tiene burn (fireball).
       if (projectile.ability.burnDuration) {
         for (let p = 0; p < 2; p++) {
@@ -155,6 +202,22 @@ export class CombatEngine {
             projectile.x + (Math.random() - 0.5) * 6,
             projectile.y + (Math.random() - 0.5) * 6
           );
+        }
+      }
+
+      // Water projectile trail particles.
+      if (projectile.ability.waterPuddleDuration) {
+        for (let d = 0; d < 2; d++) {
+          this.particles.push({
+            x: projectile.x + (Math.random() - 0.5) * 5,
+            y: projectile.y - (projectile.z || 0) + (Math.random() - 0.5) * 5,
+            vx: (Math.random() - 0.5) * 55,
+            vy: -20 - Math.random() * 28,
+            life: 0.16 + Math.random() * 0.2,
+            maxLife: 0.36,
+            size: 1.4 + Math.random() * 1.9,
+            color: Math.random() < 0.5 ? '#4aa7ff' : '#8ad9ff'
+          });
         }
       }
 
@@ -186,6 +249,18 @@ export class CombatEngine {
         }
       }
 
+      // Water bolts can extinguish burning trees and create puddles.
+      if (!hit && worldMap && projectile.ability.waterPuddleDuration) {
+        const extinguished = worldMap.extinguishTreesInRadius(
+          projectile.x,
+          projectile.y,
+          projectile.ability.extinguishRadius || 34
+        );
+        if (extinguished > 0) {
+          hit = true;
+        }
+      }
+
       // Colisión con enemigos.
       if (!hit) {
         for (const enemy of enemies) {
@@ -197,6 +272,19 @@ export class CombatEngine {
             if (projectile.ability.burnDuration) {
               this.applyBurn(enemy, projectile.ability.burnDuration, projectile.ability.burnDps || 4,
                 projectile.ability.projectileColor || '#FF4500');
+            }
+            if (projectile.ability.waterPuddleDuration) {
+              enemy.burnTime = 0;
+              enemy.burnTick = 0;
+              if (typeof enemy.applySlippery === 'function') {
+                enemy.applySlippery(
+                  projectile.ability.slipperyDuration || 1.8,
+                  enemy.x - projectile.x,
+                  enemy.y - projectile.y,
+                  110,
+                  projectile.ability.slipFriction || 0.92
+                );
+              }
             }
             this.applyKnockback(
               { x: projectile.x - projectile.vx * 0.01, y: projectile.y - projectile.vy * 0.01 },
@@ -212,8 +300,40 @@ export class CombatEngine {
       }
 
       if (hit || projectile.life <= 0) {
+        if (worldMap && projectile.ability.waterPuddleDuration) {
+          worldMap.spawnWaterPuddle(
+            projectile.x,
+            projectile.y,
+            projectile.ability.waterPuddleRadius || 30,
+            projectile.ability.waterPuddleDuration || 4.5,
+            projectile.ability.slipFriction || 0.92,
+            projectile.ability.slipperyDuration || 1.8
+          );
+          worldMap.extinguishTreesInRadius(
+            projectile.x,
+            projectile.y,
+            projectile.ability.extinguishRadius || 34
+          );
+          for (let s = 0; s < 20; s++) {
+            this.particles.push({
+              x: projectile.x,
+              y: projectile.y - (projectile.z || 0) * 0.3,
+              vx: (Math.random() - 0.5) * 180,
+              vy: -20 - Math.random() * 80,
+              life: 0.25 + Math.random() * 0.3,
+              maxLife: 0.55,
+              size: 1.6 + Math.random() * 2.6,
+              color: Math.random() < 0.5 ? '#4aa7ff' : '#8ad9ff'
+            });
+          }
+        }
         this.projectiles.splice(i, 1);
       }
+    }
+
+    for (let i = this.lightningBeams.length - 1; i >= 0; i--) {
+      this.lightningBeams[i].life -= dt;
+      if (this.lightningBeams[i].life <= 0) this.lightningBeams.splice(i, 1);
     }
   }
 
@@ -222,6 +342,224 @@ export class CombatEngine {
     target.burnTick = target.burnTick || 0;
     target.burnDamage = damagePerTick;
     target.burnColor = color;
+  }
+
+  applyParalyze(target, durationSeconds = 0.8) {
+    if (!target) return;
+    if (typeof target.applyParalyze === 'function') {
+      target.applyParalyze(durationSeconds);
+      return;
+    }
+    target.stunTime = Math.max(target.stunTime || 0, durationSeconds);
+  }
+
+  castChainLightning(fromPlayer, toTarget, ability) {
+    const enemies = this._enemyContext || [];
+    if (!enemies.length) return false;
+
+    let firstTarget = toTarget && toTarget.takeDamage ? toTarget : null;
+    if (!firstTarget || firstTarget.dead) {
+      const maxRange = ability.range || 220;
+      let best = null;
+      let bestDist = Infinity;
+      const aimX = toTarget && typeof toTarget.x === 'number' ? toTarget.x : fromPlayer.x;
+      const aimY = toTarget && typeof toTarget.y === 'number' ? toTarget.y : fromPlayer.y;
+      for (const enemy of enemies) {
+        if (!enemy || enemy.dead) continue;
+        const d = Math.hypot(enemy.x - fromPlayer.x, enemy.y - fromPlayer.y);
+        const aimDist = Math.hypot(enemy.x - aimX, enemy.y - aimY);
+        if (d <= maxRange && aimDist < bestDist) {
+          best = enemy;
+          bestDist = aimDist;
+        }
+      }
+      firstTarget = best;
+    }
+    if (!firstTarget) return false;
+
+    const chainCount = Math.max(1, ability.chainCount || 4);
+    const jumpRadius = ability.chainRadius || 170;
+    const hitList = [];
+    let current = firstTarget;
+    const used = new Set();
+
+    for (let i = 0; i < chainCount && current; i++) {
+      used.add(current);
+      hitList.push(current);
+      let next = null;
+      let nearest = Infinity;
+      for (const enemy of enemies) {
+        if (!enemy || enemy.dead || used.has(enemy)) continue;
+        const d = Math.hypot(enemy.x - current.x, enemy.y - current.y);
+        if (d <= jumpRadius && d < nearest) {
+          next = enemy;
+          nearest = d;
+        }
+      }
+      current = next;
+    }
+
+    let prevX = fromPlayer.x;
+    let prevY = fromPlayer.y;
+    for (let i = 0; i < hitList.length; i++) {
+      const enemy = hitList[i];
+      const falloff = 1 - i * 0.14;
+      const dmg = this.calculateDamage({ ...ability, baseDamage: ability.baseDamage * Math.max(0.45, falloff) });
+      enemy.takeDamage(dmg);
+      this.applyParalyze(enemy, ability.paralyzeDuration || 1.2);
+      this.spawnDamageFloat(enemy.x, enemy.y, dmg, '#FFE45E');
+      this.lightningBeams.push({
+        x1: prevX,
+        y1: prevY,
+        x2: enemy.x,
+        y2: enemy.y,
+        life: 0.18,
+        maxLife: 0.18,
+        color: ability.projectileColor || '#FFE45E'
+      });
+      prevX = enemy.x;
+      prevY = enemy.y;
+    }
+
+    return hitList.length > 0;
+  }
+
+  castAirSlash(fromPlayer, toTarget, ability) {
+    const enemies = this._enemyContext || [];
+    const worldMap = this._worldContext || null;
+    const maxRange = ability.range || 170;
+    const targetDist = Math.hypot((toTarget.x || fromPlayer.x) - fromPlayer.x, (toTarget.y || fromPlayer.y) - fromPlayer.y);
+    const angle = Math.atan2((toTarget.y || fromPlayer.y) - fromPlayer.y, (toTarget.x || fromPlayer.x) - fromPlayer.x);
+    const centerDist = Math.min(maxRange, targetDist || maxRange * 0.65);
+    const centerX = fromPlayer.x + Math.cos(angle) * centerDist;
+    const centerY = fromPlayer.y + Math.sin(angle) * centerDist;
+    const gustRadius = ability.gustRadius || 120;
+
+    if (worldMap && typeof worldMap.stripLeavesAt === 'function') {
+      worldMap.stripLeavesAt(centerX, centerY, ability.leafStripRadius || gustRadius + 20, 14);
+    }
+
+    let affected = 0;
+    for (const enemy of enemies) {
+      if (!enemy || enemy.dead) continue;
+      const d = Math.hypot(enemy.x - centerX, enemy.y - centerY);
+      if (d > gustRadius + (enemy.radius || 10)) continue;
+      const impactScale = Math.max(0.42, 1 - d / Math.max(1, gustRadius));
+      const dmg = this.calculateDamage({ ...ability, baseDamage: ability.baseDamage * impactScale });
+      enemy.takeDamage(dmg);
+      const dirX = enemy.x - centerX;
+      const dirY = enemy.y - centerY;
+      if (typeof enemy.launchAirborne === 'function') {
+        enemy.launchAirborne(
+          ability.launchDuration || 1.1,
+          ability.launchUpward || 320,
+          dirX,
+          dirY,
+          (ability.launchForce || 250) * impactScale,
+          ability.spinSpeed || 14,
+          Math.max(6, Math.round((ability.fallDamage || 16) * impactScale))
+        );
+      } else {
+        this.applyKnockback({ x: centerX, y: centerY }, enemy);
+      }
+      this.spawnDamageFloat(enemy.x, enemy.y, dmg, '#C7ECFF');
+      affected++;
+    }
+
+    for (let i = 0; i < 24; i++) {
+      const a = angle + (Math.random() - 0.5) * 1.3;
+      const r = Math.random() * gustRadius * 0.95;
+      this.particles.push({
+        x: centerX + Math.cos(a) * r,
+        y: centerY + Math.sin(a) * r,
+        vx: Math.cos(a) * (120 + Math.random() * 130),
+        vy: Math.sin(a) * (120 + Math.random() * 130),
+        life: 0.18 + Math.random() * 0.24,
+        maxLife: 0.42,
+        size: 1.5 + Math.random() * 1.8,
+        color: Math.random() < 0.45 ? '#DDF6FF' : '#BDE8FF'
+      });
+    }
+
+    return true;
+  }
+
+  castEarthSpike(fromPlayer, toTarget, ability) {
+    const enemies = this._enemyContext || [];
+    const radius = ability.spikeRadius || 115;
+    const knockForce = ability.spikeKnockback || 200;
+
+    // Burst center: between player and cursor, closer to player
+    const dx = (toTarget.x || fromPlayer.x) - fromPlayer.x;
+    const dy = (toTarget.y || fromPlayer.y) - fromPlayer.y;
+    const angle = Math.atan2(dy, dx);
+    const dist = Math.min(Math.hypot(dx, dy), radius * 0.55);
+    const cX = fromPlayer.x + Math.cos(angle) * dist;
+    const cY = fromPlayer.y + Math.sin(angle) * dist;
+
+    let affected = 0;
+    for (const enemy of enemies) {
+      if (!enemy || enemy.dead) continue;
+      const d = Math.hypot(enemy.x - cX, enemy.y - cY);
+      if (d > radius + (enemy.radius || 10)) continue;
+      const scale = Math.max(0.35, 1 - d / Math.max(1, radius));
+      const dmg = this.calculateDamage({ ...ability, baseDamage: ability.baseDamage * scale });
+      enemy.takeDamage(dmg);
+      // Mini-launch upward + outward knockback
+      if (typeof enemy.launchAirborne === 'function') {
+        const ex = enemy.x - cX;
+        const ey = enemy.y - cY;
+        enemy.launchAirborne(
+          0.55 + scale * 0.35,
+          180 + scale * 140,
+          ex, ey,
+          knockForce * scale,
+          6,
+          Math.max(4, Math.round(10 * scale))
+        );
+      } else {
+        this.applyKnockback({ x: cX, y: cY }, enemy);
+      }
+      if (ability.spikeStunDuration) {
+        this.applyParalyze(enemy, ability.spikeStunDuration);
+      }
+      this.spawnDamageFloat(enemy.x, enemy.y, dmg, '#C8A96E');
+      affected++;
+    }
+
+    // Rock/earth particles erupting upward
+    const colors = ['#A0826D', '#8B6355', '#C8A96E', '#6B4C3B', '#D2B48C'];
+    for (let i = 0; i < 32; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * radius * 0.9;
+      const speed = 60 + Math.random() * 130;
+      this.particles.push({
+        x: cX + Math.cos(a) * r * 0.5,
+        y: cY + Math.sin(a) * r * 0.5,
+        vx: Math.cos(a) * speed * 0.6,
+        vy: -speed * (0.6 + Math.random() * 0.8),
+        life: 0.22 + Math.random() * 0.32,
+        maxLife: 0.54,
+        size: 2 + Math.random() * 3.5,
+        color: colors[Math.floor(Math.random() * colors.length)]
+      });
+    }
+    // Ground crack ring particles
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      this.particles.push({
+        x: cX + Math.cos(a) * radius * 0.85,
+        y: cY + Math.sin(a) * radius * 0.85,
+        vx: Math.cos(a) * 28,
+        vy: Math.sin(a) * 28,
+        life: 0.28,
+        maxLife: 0.28,
+        size: 2.5,
+        color: '#8B6355'
+      });
+    }
+
+    return true;
   }
 
   spawnDamageFloat(x, y, damage, color) {
@@ -263,13 +601,53 @@ export class CombatEngine {
   drawProjectiles(ctx, camera = null) {
     const camX = camera ? camera.x : 0;
     const camY = camera ? camera.y : 0;
+
+    // Lightning beams
+    for (const beam of this.lightningBeams) {
+      const alpha = Math.max(0, beam.life / beam.maxLife);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = beam.color || '#FFE45E';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(beam.x1 - camX, beam.y1 - camY);
+      ctx.lineTo(beam.x2 - camX, beam.y2 - camY);
+      ctx.stroke();
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(beam.x1 - camX, beam.y1 - camY);
+      ctx.lineTo(beam.x2 - camX, beam.y2 - camY);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     for (const projectile of this.projectiles) {
       const color = projectile.ability.projectileColor || '#FFFFFF';
       ctx.save();
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.arc(projectile.x - camX, projectile.y - camY, projectile.radius, 0, Math.PI * 2);
-      ctx.fill();
+      if (projectile.ability.waterPuddleDuration) {
+        const px = projectile.x - camX;
+        const py = projectile.y - camY - (projectile.z || 0);
+        if ((projectile.z || 0) > 0) {
+          ctx.fillStyle = 'rgba(20,50,80,0.20)';
+          ctx.beginPath();
+          ctx.ellipse(projectile.x - camX, projectile.y - camY + projectile.radius * 0.45, projectile.radius + 3, Math.max(2, projectile.radius * 0.65), 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.ellipse(px, py, projectile.radius + 2, projectile.radius * 0.75, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(170,230,255,0.8)';
+        ctx.beginPath();
+        ctx.ellipse(px - 2, py - 2, Math.max(2, projectile.radius * 0.42), Math.max(1.5, projectile.radius * 0.25), 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(projectile.x - camX, projectile.y - camY, projectile.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 1.5;
       ctx.stroke();

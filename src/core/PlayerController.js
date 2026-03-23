@@ -48,6 +48,11 @@ export class PlayerController {
     // Knockback
     this.kbx = 0;
     this.kby = 0;
+    this.slipVx = 0;
+    this.slipVy = 0;
+    this.slipperyTime = 0;
+    this.slipFriction = 0.9;
+    this.stunTime = 0;
     this.limbPhase = 0; // for hands/feet animation
   }
 
@@ -64,21 +69,32 @@ export class PlayerController {
 
   // ========== MOVEMENT ==========
   update(dt, input) {
+    this.stunTime = Math.max(0, (this.stunTime || 0) - dt);
+    this.slipperyTime = Math.max(0, (this.slipperyTime || 0) - dt);
+
     // Calculate velocity from input
     this.vx = 0;
     this.vy = 0;
 
-    if (input.w) this.vy -= this.speed;
-    if (input.s) this.vy += this.speed;
-    if (input.a) this.vx -= this.speed;
-    if (input.d) this.vx += this.speed;
+    if (this.stunTime <= 0) {
+      if (input.w) this.vy -= this.speed;
+      if (input.s) this.vy += this.speed;
+      if (input.a) this.vx -= this.speed;
+      if (input.d) this.vx += this.speed;
+    }
 
     // Update position (input + knockback externo)
-    const kbDecay = 1 - Math.min(1, dt * 10);
+    const isSlippery = this.slipperyTime > 0;
+    const kbDecay = 1 - Math.min(1, dt * (isSlippery ? 3.2 : 10));
     this.kbx *= kbDecay;
     this.kby *= kbDecay;
-    this.x += (this.vx + this.kbx) * dt;
-    this.y += (this.vy + this.kby) * dt;
+
+    const slipDecay = Math.max(0, 1 - (isSlippery ? (1 - (this.slipFriction || 0.9)) : 0.35) * dt * 60);
+    this.slipVx *= slipDecay;
+    this.slipVy *= slipDecay;
+
+    this.x += (this.vx + this.kbx + this.slipVx) * dt;
+    this.y += (this.vy + this.kby + this.slipVy) * dt;
 
     // Clamp to world bounds
     this.x = Math.max(this.radius, Math.min(this.worldWidth  - this.radius, this.x));
@@ -327,6 +343,20 @@ export class PlayerController {
     const angle = Math.atan2(this.y - fromY, this.x - fromX);
     this.kbx = Math.cos(angle) * force;
     this.kby = Math.sin(angle) * force;
+  }
+
+  applySlippery(duration = 1.2, dirX = 0, dirY = 0, force = 130, friction = 0.9) {
+    this.slipperyTime = Math.max(this.slipperyTime || 0, duration);
+    this.slipFriction = Math.max(0.82, Math.min(0.98, friction || 0.9));
+    const mag = Math.hypot(dirX, dirY) || 1;
+    this.slipVx += (dirX / mag) * force;
+    this.slipVy += (dirY / mag) * force;
+  }
+
+  applyParalyze(duration = 0.8) {
+    this.stunTime = Math.max(this.stunTime || 0, duration);
+    this.vx = 0;
+    this.vy = 0;
   }
 
   // ========== PROGRESSION ==========

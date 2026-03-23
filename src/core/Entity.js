@@ -52,6 +52,15 @@ export class EntityManager {
       enemy.x += enemy.vx * dt;
       enemy.y += enemy.vy * dt;
 
+      enemy.stunTime = Math.max(0, (enemy.stunTime || 0) - dt);
+      enemy.slipperyTime = Math.max(0, (enemy.slipperyTime || 0) - dt);
+      const slippery = (enemy.slipperyTime || 0) > 0;
+      const slipDecay = Math.max(0, 1 - (slippery ? (1 - (enemy.slipFriction || 0.92)) : 0.32) * dt * 60);
+      enemy.slipVx = (enemy.slipVx || 0) * slipDecay;
+      enemy.slipVy = (enemy.slipVy || 0) * slipDecay;
+      enemy.x += (enemy.slipVx || 0) * dt;
+      enemy.y += (enemy.slipVy || 0) * dt;
+
       // Limb animation phase for simple hands/feet movement
       enemy.limbPhase = (enemy.limbPhase || 0) + dt * (enemy.limbSpeed || 6);
       // Decay recent hit flash (set when takeDamage is called)
@@ -64,6 +73,46 @@ export class EntityManager {
         if (enemy.burnTick <= 0) {
           enemy.burnTick += 0.4;
           enemy.takeDamage(enemy.burnDamage || 3);
+        }
+      }
+
+      // Airborne state: parabolic movement with spin and optional fall damage.
+      if ((enemy.airborneTime || 0) > 0 || (enemy.z || 0) > 0) {
+        enemy.airborneTime = Math.max(0, (enemy.airborneTime || 0) - dt);
+        enemy.x += (enemy.airVx || 0) * dt;
+        enemy.y += (enemy.airVy || 0) * dt;
+        enemy.vz = (enemy.vz || 0) - (enemy.gravity || 640) * dt;
+        enemy.z = (enemy.z || 0) + (enemy.vz || 0) * dt;
+        enemy.spinAngle = (enemy.spinAngle || 0) + (enemy.spinSpeed || 0) * dt;
+
+        if (!enemy.recoveredInAir && Math.random() < dt * (enemy.reactionRate || 0.55)) {
+          enemy.recoveredInAir = true;
+        }
+
+        enemy.x = Math.max(enemy.radius, Math.min(this.width - enemy.radius, enemy.x));
+        enemy.y = Math.max(enemy.radius, Math.min(this.height - enemy.radius, enemy.y));
+
+        if ((enemy.z || 0) <= 0 && (enemy.vz || 0) <= 0) {
+          enemy.z = 0;
+          enemy.vz = 0;
+          enemy.airborneTime = 0;
+          enemy.vx += (enemy.airVx || 0) * 0.2;
+          enemy.vy += (enemy.airVy || 0) * 0.2;
+          const baseFallDamage = enemy.fallDamage || 0;
+          const appliedFallDamage = enemy.recoveredInAir
+            ? Math.max(0, Math.floor(baseFallDamage * 0.35))
+            : baseFallDamage;
+          if (appliedFallDamage > 0) {
+            enemy.takeDamage(appliedFallDamage);
+          }
+          enemy.stunTime = Math.max(enemy.stunTime || 0, enemy.recoveredInAir ? 0.12 : 0.45);
+          enemy.recoveredInAir = false;
+          enemy.fallDamage = 0;
+          enemy.airVx = 0;
+          enemy.airVy = 0;
+        } else {
+          // Keep airborne enemies out of regular steering/attacks until they land.
+          continue;
         }
       }
 
@@ -91,7 +140,10 @@ export class EntityManager {
       const maxSpd = enemy.speed || 85;
 
       // Passive animals wander; hostiles home to target
-      if (enemy.passive) {
+      if (enemy.stunTime > 0) {
+        enemy.vx *= 0.75;
+        enemy.vy *= 0.75;
+      } else if (enemy.passive) {
         // gentle wandering motion
         enemy.wanderPhase = (enemy.wanderPhase || 0) + dt * 0.8;
         const wobble = Math.sin(enemy.wanderPhase) * 8;
@@ -106,7 +158,7 @@ export class EntityManager {
       if (spd > maxSpd) { enemy.vx = (enemy.vx / spd) * maxSpd; enemy.vy = (enemy.vy / spd) * maxSpd; }
 
       // Ataque del enemigo al jugador con cooldown (hostiles only)
-      if (!enemy.passive) {
+      if (!enemy.passive && enemy.stunTime <= 0) {
         enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
         if (tdist <= (enemy.attackRange || 26) && enemy.attackCooldown <= 0 && target.takeDamage) {
           target.takeDamage(enemy.attackDamage || 6);
@@ -205,12 +257,22 @@ export class EntityManager {
     for (const enemy of this.enemies) {
       if (camera && !camera.isVisible(enemy.x, enemy.y, enemy.radius + 20)) continue;
       const sx = enemy.x - offX;
-      const sy = enemy.y - offY;
+      const syGround = enemy.y - offY;
+      const sy = syGround - (enemy.z || 0);
+      if ((enemy.z || 0) > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.22)';
+        ctx.beginPath();
+        ctx.ellipse(sx, syGround + enemy.radius * 0.55, enemy.radius * 0.88, enemy.radius * 0.36, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
       // Body with subtle deformation when moving/attacking/hit
       const moveFactor = Math.min(1, Math.hypot(enemy.vx, enemy.vy) / (enemy.speed || 60));
       const deform = 1 + Math.sin(enemy.limbPhase || 0) * 0.03 + (enemy.attackFlash || 0) * 0.12 + (enemy.burnTime > 0 ? 0.06 : 0);
       ctx.save();
       ctx.translate(sx, sy);
+      if ((enemy.z || 0) > 0) {
+        ctx.rotate(enemy.spinAngle || 0);
+      }
       ctx.scale(1 + Math.sin(enemy.limbPhase || 0) * 0.02, 1 - Math.abs(Math.sin(enemy.limbPhase || 0)) * 0.03);
       ctx.fillStyle = enemy.color;
       ctx.beginPath();
@@ -394,6 +456,16 @@ export class EntityManager {
         ctx.restore();
       }
 
+      if ((enemy.z || 0) > 0) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(210,230,255,0.55)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(sx, sy, enemy.radius + 7, enemy.spinAngle || 0, (enemy.spinAngle || 0) + Math.PI * 1.35);
+        ctx.stroke();
+        ctx.restore();
+      }
+
       // DEBUG: Show typeId & species above mob
       ctx.fillStyle = '#FFFF00';
       ctx.font = 'bold 10px Arial';
@@ -472,10 +544,47 @@ export class EntityManager {
       attackRange: radius + 16,
       attackDamage: dmg,
       attackFlash: 0,
+      stunTime: 0,
+      slipperyTime: 0,
+      slipVx: 0,
+      slipVy: 0,
+      slipFriction: 0.92,
+      airborneTime: 0,
+      z: 0,
+      vz: 0,
+      gravity: 640,
+      airVx: 0,
+      airVy: 0,
+      spinAngle: 0,
+      spinSpeed: 0,
+      fallDamage: 0,
+      recoveredInAir: false,
+      reactionRate: 0.55,
       xpValue:    xpVal,
       lootItem:   lootId,
       lootChance: lootCh,
       typeId,
+      applyParalyze(duration = 0.8) {
+        this.stunTime = Math.max(this.stunTime || 0, duration);
+      },
+      applySlippery(duration = 1.2, dirX = 0, dirY = 0, force = 110, friction = 0.92) {
+        this.slipperyTime = Math.max(this.slipperyTime || 0, duration);
+        this.slipFriction = Math.max(0.82, Math.min(0.98, friction || 0.92));
+        const mag = Math.hypot(dirX, dirY) || 1;
+        this.slipVx = (this.slipVx || 0) + (dirX / mag) * force;
+        this.slipVy = (this.slipVy || 0) + (dirY / mag) * force;
+      },
+      launchAirborne(duration = 1.0, upVelocity = 300, dirX = 0, dirY = 0, horizontalForce = 220, spinSpeed = 14, fallDamage = 16) {
+        const mag = Math.hypot(dirX, dirY) || 1;
+        this.airborneTime = Math.max(this.airborneTime || 0, duration);
+        this.vz = Math.max(this.vz || 0, upVelocity);
+        this.airVx = (dirX / mag) * horizontalForce;
+        this.airVy = (dirY / mag) * horizontalForce;
+        this.spinSpeed = spinSpeed;
+        this.fallDamage = Math.max(this.fallDamage || 0, fallDamage);
+        this.recoveredInAir = false;
+        this.stunTime = Math.max(this.stunTime || 0, duration * 0.65);
+      },
       takeDamage(amount) {
         this.hp -= amount;
         this.hitFlash = 1; // trigger red tint briefly

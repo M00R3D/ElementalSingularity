@@ -46,6 +46,7 @@ export class InventoryUI {
       const itemH = 28, padding = 4;
       let drawY = (contentY + 16) - this.scrollPos; // matches draw offset
       for (const ab of abilities) {
+        if (ab.element && !this.gameState.hasElementUnlocked(ab.element)) continue;
         if (clickY >= drawY && clickY <= drawY + itemH && clickX >= contentX && clickX <= contentX + (panelW - 24)) {
           this.dragging = { type: 'ability', id: ab.id, dragX: clickX, dragY: clickY };
           this.selectedAbility = ab.id;
@@ -296,6 +297,10 @@ export class InventoryUI {
     let drawY = y - this.scrollPos;
     for (let i = 0; i < abilities.length; i++) {
       const ab = abilities[i];
+      // Hide abilities of locked elements
+      if (ab.element && !this.gameState.hasElementUnlocked(ab.element)) {
+        continue;
+      }
       if (drawY + itemH < y) {
         drawY += itemH + padding;
         continue;
@@ -358,6 +363,8 @@ export class InventoryUI {
       // +16 matches the hint text offset applied in drawAbilitiesTab
       let drawY = (contentY + 16) - this.scrollPos;
       for (const ab of abilities) {
+        // Skip locked-element abilities
+        if (ab.element && !this.gameState.hasElementUnlocked(ab.element)) continue;
         if (clickY >= drawY && clickY <= drawY + itemH &&
             clickX >= contentX && clickX <= contentX + contentW) {
           this.selectedAbility = ab.id;

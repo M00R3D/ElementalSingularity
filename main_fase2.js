@@ -64,7 +64,55 @@ let castHudFlash = 0;
 let castText = '';
 let castTextTimer = 0;
 let castColor = '#FFFFFF';
-const FREE_CAST_ABILITIES = new Set(['basicAttack', 'fireball']);
+const FREE_CAST_ABILITIES = new Set(['basicAttack', 'fireball', 'waterbolt', 'airslash', 'lightningChain', 'earthSpike']);
+
+function getStarterOrbItemId(elementId) {
+  const safe = String(elementId || 'fire').toLowerCase();
+  return `elemental_orb_${safe}`;
+}
+
+function isElementalOrbItem(itemId) {
+  return typeof itemId === 'string' && itemId.startsWith('elemental_orb_');
+}
+
+function tryConsumeSelectedOrb(slotId) {
+  const slot = gameState.hotbar[slotId];
+  const slotValue = slot && slot.abilityId;
+  if (!slotValue || typeof slotValue !== 'string' || !slotValue.startsWith('item:')) return false;
+  const itemId = slotValue.split(':')[1];
+  if (!isElementalOrbItem(itemId)) return false;
+  const count = gameState.inventory.items[itemId] || 0;
+  if (count <= 0) {
+    gameState.equipAbility(slotId, null);
+    return false;
+  }
+
+  const elementId = itemId.replace('elemental_orb_', '');
+  gameState.inventory.items[itemId] = count - 1;
+  if (gameState.inventory.items[itemId] <= 0) {
+    delete gameState.inventory.items[itemId];
+    gameState.equipAbility(slotId, null);
+  }
+
+  if (gameState.unlockElement(elementId)) {
+    gameState.notify(`Elemento desbloqueado: ${elementId}`, '#AAFFCC', 1.3);
+  } else {
+    gameState.notify(`Ya tienes desbloqueado ${elementId}`, '#D5E6FF', 1.0);
+  }
+  return true;
+}
+
+function canUseAbilityId(abilityId, notify = true) {
+  const ability = GAME_DATA.abilities.find((a) => a.id === abilityId);
+  if (!ability) return false;
+  if (!gameState.hasElementUnlocked(ability.element)) {
+    if (notify) {
+      gameState.notify(`Elemento bloqueado: ${ability.element}. Usa su orbe para desbloquearlo.`, '#FF9999', 1.4);
+    }
+    return false;
+  }
+  return true;
+}
 
 function spawnInitialPassiveMobs() {
   const cfg = worldManager.getCurrentWorldConfig();
@@ -116,16 +164,19 @@ function applyWorldConfig(worldId) {
 }
 
 function applyStarterElement(starterElement) {
-  const elementToAbility = {
-    fire: 'fireball',
-    water: 'waterbolt',
-    air: 'airslash',
-    earth: 'basicAttack',
-    lightning: 'basicAttack'
-  };
-  const secondSlotAbility = elementToAbility[starterElement] || 'fireball';
+  const orbItemId = getStarterOrbItemId(starterElement || 'fire');
+  for (const key of Object.keys(gameState.inventory.items || {})) {
+    if (isElementalOrbItem(key)) {
+      delete gameState.inventory.items[key];
+    }
+  }
+  gameState.resetUnlockedElements();
+  for (let i = 0; i < gameState.hotbar.length; i++) {
+    gameState.equipAbility(i, null);
+  }
   gameState.equipAbility(0, 'basicAttack');
-  gameState.equipAbility(1, secondSlotAbility);
+  gameState.equipAbility(1, `item:${orbItemId}`);
+  gameState.addItem(orbItemId, 1);
 }
 
 function startGameWithSelection(worldId, characterMeta) {
@@ -290,8 +341,10 @@ canvas.addEventListener('mouseup', (e) => {
       // Dropped onto a hotbar slot
       if (slot >= 0) {
         if (result.type === 'ability') {
-          hotbarSystem.equipAbility(slot, result.id);
-          gameState.notify(`Asignada habilidad ${result.id} al slot ${slot + 1}`, '#AAFFCC', 1.2);
+          if (canUseAbilityId(result.id, true)) {
+            hotbarSystem.equipAbility(slot, result.id);
+            gameState.notify(`Asignada habilidad ${result.id} al slot ${slot + 1}`, '#AAFFCC', 1.2);
+          }
         } else if (result.type === 'item') {
           // If dragged from another hotbar slot, swap; otherwise assign reference and restore picked count to inventory
           if (result.from === 'hotbar' && result.slot !== undefined) {
@@ -373,10 +426,26 @@ canvas.addEventListener('mouseup', (e) => {
 });
 
 canvas.addEventListener('click', (e) => {
-  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
+
+  // Character select menu click handling
+  if (characterSelectMenu.isOpen) {
+    const result = characterSelectMenu.handleClick(clickX, clickY);
+    if (result) {
+      if (result.action === 'start') {
+        characterSelectMenu.close();
+        startGameWithSelection(selectedWorldId || worldManager.currentWorldId, result.character);
+      } else if (result.action === 'back_world') {
+        characterSelectMenu.close();
+        worldSelectMenu.isOpen = true;
+      }
+    }
+    return;
+  }
+
+  if (worldSelectMenu.isOpen) return;
 
   // Route clicks to inventory when open
   if (inventoryUI.isOpen) {
@@ -400,8 +469,10 @@ canvas.addEventListener('click', (e) => {
         const slot = hotbarSystem.getSlotAtMouse(clickX, clickY, canvas);
         if (slot >= 0) {
           if (result.type === 'ability') {
-            hotbarSystem.equipAbility(slot, result.id);
-            gameState.notify(`Asignada habilidad ${result.id} al slot ${slot + 1}`, '#AAFFCC', 1.2);
+            if (canUseAbilityId(result.id, true)) {
+              hotbarSystem.equipAbility(slot, result.id);
+              gameState.notify(`Asignada habilidad ${result.id} al slot ${slot + 1}`, '#AAFFCC', 1.2);
+            }
           } else if (result.type === 'item') {
             if (result.from === 'hotbar' && result.slot !== undefined) {
               const src = result.slot;
@@ -484,7 +555,18 @@ canvas.addEventListener('click', (e) => {
   }
 
   // Try to attack enemy at click position
-  const abilityId = gameState.hotbar[selectedSlot].abilityId;
+  const slotValue = gameState.hotbar[selectedSlot].abilityId;
+  if (tryConsumeSelectedOrb(selectedSlot)) {
+    return;
+  }
+  const abilityId = (slotValue && typeof slotValue === 'string' && !slotValue.startsWith('item:'))
+    ? slotValue
+    : null;
+
+  if (abilityId && !canUseAbilityId(abilityId, true)) {
+    return;
+  }
+
   let attacked = false;
   if (abilityId) {
     for (const enemy of entityManager.enemies) {
@@ -609,6 +691,8 @@ function update(dt) {
   // EntityManager handles spawning (day passive animals, night hostile groups)
   
   entityManager.update(dt, input, player, worldMap, dayNightCycle);
+  combatEngine.setCombatContext(entityManager.enemies, player, worldMap);
+  worldMap.applyPuddleEffects(player, entityManager.enemies, dt);
 
   // Auto-pickup nearby drops
   const drops = worldMap.collectDrops(player, 36);

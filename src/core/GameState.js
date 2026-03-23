@@ -2,6 +2,7 @@ export class GameStateManager {
   constructor() {
     this.playerStats = { hp: 100, maxHp: 100, mana: 50, maxMana: 50 };
     this.inventory = { items: {}, orbs: {}, materials: {} };
+    this.unlockedElements = [];
     this.hotbar = [
       { slotId: 0, abilityId: 'basicAttack' },
       { slotId: 1, abilityId: null },
@@ -56,6 +57,30 @@ export class GameStateManager {
 
   addItem(id, count = 1) {
     this.inventory.items[id] = (this.inventory.items[id] || 0) + count;
+  }
+
+  resetUnlockedElements() {
+    this.unlockedElements = [];
+  }
+
+  unlockElement(elementId) {
+    if (!elementId) return false;
+    if (this.unlockedElements.includes(elementId)) return false;
+    this.unlockedElements.push(elementId);
+    return true;
+  }
+
+  hasElementUnlocked(elementId) {
+    if (!elementId) return true;
+    return this.unlockedElements.includes(elementId);
+  }
+
+  canUseAbility(gameData, abilityId) {
+    if (!abilityId || typeof abilityId !== 'string') return false;
+    if (abilityId.startsWith('item:')) return true;
+    const ability = (gameData.abilities || []).find(a => a.id === abilityId);
+    if (!ability) return false;
+    return this.hasElementUnlocked(ability.element);
   }
 }
 
