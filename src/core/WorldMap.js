@@ -3,6 +3,8 @@
 // Handles: background tiles, trees, rocks, drops
 // ========================================
 
+import { buildHitboxProfile, WORLD_HITBOX_TEMPLATES } from './PhysicsConfig.js';
+
 export class WorldMap {
   constructor(config = {}) {
     this.width  = config.width  || 2400;
@@ -12,6 +14,16 @@ export class WorldMap {
     this.drops  = [];
     this.puddles = [];
     this._generate(config.seed || 1337, config.treeCount || 40, config.rockCount || 25);
+  }
+
+  getMinimapBackgroundColor(worldX, worldY) {
+    const tw = 80;
+    const th = 80;
+    const column = Math.floor(worldX / tw);
+    const row = Math.floor(worldY / th);
+    const palette = ['#18290d', '#1c2f10', '#162608', '#1f330d', '#1a2c0b'];
+    const variant = Math.abs((column * 7) ^ (row * 13)) % palette.length;
+    return palette[variant];
   }
 
   // ── Seeded LCG RNG ──────────────────────────────────────────────────────
@@ -28,6 +40,8 @@ export class WorldMap {
     const rng = this._rng(seed);
     const cx  = this.width  / 2;
     const cy  = this.height / 2;
+    const treeHitboxProfile = buildHitboxProfile(WORLD_HITBOX_TEMPLATES.tree, 1);
+    const stumpHitboxProfile = buildHitboxProfile(WORLD_HITBOX_TEMPLATES.stump, 1);
 
     // Trees – avoid the player spawn zone (200 px radius around centre)
     for (let i = 0; i < treeCount; i++) {
@@ -58,7 +72,15 @@ export class WorldMap {
         swayTime: 0,
         swayPower: 0,
         swayPhase: Math.random() * Math.PI * 2,
-        smokeParticles: []
+        smokeParticles: [],
+        hitboxOffsets: treeHitboxProfile.hitboxOffsets,
+        hitboxRadii: treeHitboxProfile.hitboxRadii,
+        hitboxZOffsets: treeHitboxProfile.hitboxZOffsets,
+        hitboxHeights: treeHitboxProfile.hitboxHeights,
+        stumpHitboxOffsets: stumpHitboxProfile.hitboxOffsets,
+        stumpHitboxRadii: stumpHitboxProfile.hitboxRadii,
+        stumpHitboxZOffsets: stumpHitboxProfile.hitboxZOffsets,
+        stumpHitboxHeights: stumpHitboxProfile.hitboxHeights
       });
     }
 
@@ -72,14 +94,69 @@ export class WorldMap {
       } while (tries < 30 && Math.hypot(x - cx, y - cy) < 150);
 
       const sz = 10 + rng() * 14;
+      const rockHitboxProfile = buildHitboxProfile(WORLD_HITBOX_TEMPLATES.rock, sz);
       this.rocks.push({
         x, y,
         rx: sz,
         ry: sz * 0.62,
         angle: rng() * Math.PI,
-        shade: 35 + (rng() * 30 | 0)
+        shade: 35 + (rng() * 30 | 0),
+        hitboxOffsets: rockHitboxProfile.hitboxOffsets,
+        hitboxRadii: rockHitboxProfile.hitboxRadii,
+        hitboxZOffsets: rockHitboxProfile.hitboxZOffsets,
+        hitboxHeights: rockHitboxProfile.hitboxHeights
       });
     }
+  }
+
+  getCollisionBodies() {
+    const bodies = [];
+
+    for (const tree of this.trees) {
+      if (!tree || tree.state === 'burnt') continue;
+      const scale = tree.state === 'stump' ? 0.72 : 1;
+      bodies.push({
+        kind: 'tree',
+        solid: true,
+        ref: tree,
+        x: tree.x,
+        y: tree.y,
+        z: 0,
+        hitboxOffsets: tree.state === 'stump'
+          ? (tree.stumpHitboxOffsets || [{ x: 0, y: 8 }])
+          : (tree.hitboxOffsets || [{ x: 0, y: 12 }]).map((offset) => ({
+              x: offset.x || 0,
+              y: (offset.y || 0) * scale
+            })),
+        hitboxRadii: tree.state === 'stump'
+          ? tree.stumpHitboxRadii || [6.5]
+          : (tree.hitboxRadii || [9]).map((radius) => radius * scale),
+        hitboxZOffsets: tree.state === 'stump'
+          ? tree.stumpHitboxZOffsets || [0]
+          : tree.hitboxZOffsets || [0],
+        hitboxHeights: tree.state === 'stump'
+          ? tree.stumpHitboxHeights || [14]
+          : tree.hitboxHeights || [28]
+      });
+    }
+
+    for (const rock of this.rocks) {
+      if (!rock) continue;
+      bodies.push({
+        kind: 'rock',
+        solid: true,
+        ref: rock,
+        x: rock.x,
+        y: rock.y,
+        z: 0,
+        hitboxOffsets: rock.hitboxOffsets || [{ x: 0, y: 0 }],
+        hitboxRadii: rock.hitboxRadii || [Math.max(8, Math.min(rock.rx || 10, rock.ry || 8))],
+        hitboxZOffsets: rock.hitboxZOffsets || [0],
+        hitboxHeights: rock.hitboxHeights || [18]
+      });
+    }
+
+    return bodies;
   }
 
   // ── Update ───────────────────────────────────────────────────────────────

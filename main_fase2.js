@@ -18,6 +18,8 @@ import WorldSelectMenu from './src/core/WorldSelectMenu.js';
 import CraftingSystem from './src/core/CraftingSystem.js';
 import CharacterManager from './src/core/CharacterManager.js';
 import CharacterSelectMenu from './src/core/CharacterSelectMenu.js';
+import PauseMenu from './src/core/PauseMenu.js';
+import PhysicsSystem from './src/core/PhysicsSystem.js';
 
 // Canvas setup
 const canvas = document.querySelector('canvas');
@@ -54,6 +56,13 @@ const craftingSystem = new CraftingSystem(GAME_DATA);
 let gameStarted = false; // Set to true when world is selected
 let selectedWorldId = null;
 let activeCharacterMeta = null;
+const gameRules = { mode: 'survival' };
+
+function setGameMode(mode) {
+  gameRules.mode = mode;
+  gameState.gameMode = mode;
+  pauseMenu.currentGameMode = mode;
+}
 
 // Input state
 const input = { w: false, a: false, s: false, d: false, mouseX: 400, mouseY: 300 };
@@ -65,6 +74,395 @@ let castText = '';
 let castTextTimer = 0;
 let castColor = '#FFFFFF';
 const FREE_CAST_ABILITIES = new Set(['basicAttack', 'fireball', 'waterbolt', 'airslash', 'lightningChain', 'earthSpike']);
+const pauseMenu = new PauseMenu();
+const physicsSystem = new PhysicsSystem({
+  getWorldBounds: () => ({ width: WORLD_W, height: WORLD_H }),
+  getStaticBodies: () => worldMap.getCollisionBodies(),
+  getDynamicBodies: () => [player, ...entityManager.enemies.filter((enemy) => enemy && !enemy.dead)]
+});
+
+function returnToWorldSelection() {
+  pauseMenu.close();
+  inventoryUI.isOpen = false;
+  inventoryUI.dragging = null;
+  characterSelectMenu.close();
+  worldSelectMenu.isOpen = true;
+  gameStarted = false;
+  selectedWorldId = null;
+}
+
+function handlePauseMenuAction(actionId) {
+  if (actionId === 'resume') {
+    pauseMenu.close();
+    return;
+  }
+  if (actionId === 'mode_peaceful') {
+    setGameMode('peaceful');
+    entityManager.enemies = entityManager.enemies.filter((enemy) => enemy && enemy.passive);
+    gameState.notify('Modo de juego: Peaceful', '#AEE7FF', 1.5);
+    return;
+  }
+  if (actionId === 'mode_survival') {
+    setGameMode('survival');
+    gameState.notify('Modo de juego: Survival', '#FFD36A', 1.5);
+    return;
+  }
+  if (actionId === 'mode_creative') {
+    setGameMode('creative');
+    entityManager.enemies = entityManager.enemies.filter((enemy) => enemy && enemy.passive);
+    player.restore();
+    gameState.playerStats.mana = gameState.playerStats.maxMana;
+    gameState.notify('Modo de juego: Creative', '#C5FFB8', 1.5);
+    return;
+  }
+  if (actionId === 'world_select') {
+    returnToWorldSelection();
+  }
+}
+
+function worldToMinimap(worldX, worldY, mapX, mapY, mapW, mapH) {
+  return {
+    x: mapX + (worldX / WORLD_W) * mapW,
+    y: mapY + (worldY / WORLD_H) * mapH
+  };
+}
+
+function getAbilityMarkerColor(effect) {
+  if (!effect) return '#FFFFFF';
+  if (effect.color) return effect.color;
+  const ability = effect.ability || null;
+  if (!ability) return '#FFFFFF';
+  if (ability.projectileColor) return ability.projectileColor;
+  if (ability.color) return ability.color;
+  if (ability.element) return combatEngine.getElementColor(ability.element);
+  return '#FFFFFF';
+}
+
+function collectMinimapAbilityMarkers() {
+  const markers = [];
+
+  for (const projectile of combatEngine.projectiles) {
+    if (!projectile || projectile.life <= 0) continue;
+    markers.push({
+      x: projectile.x,
+      y: projectile.y,
+      color: getAbilityMarkerColor(projectile),
+      radius: 2.2
+    });
+  }
+
+  for (const slash of combatEngine.slashes) {
+    if (!slash || slash.life <= 0) continue;
+    markers.push({
+      x: slash.x + Math.cos(slash.angle || 0) * (slash.depth || 0) * 0.5,
+      y: slash.y + Math.sin(slash.angle || 0) * (slash.depth || 0) * 0.5,
+      color: getAbilityMarkerColor(slash),
+      radius: 2.5
+    });
+  }
+
+  for (const beam of combatEngine.lightningBeams) {
+    if (!beam || beam.life <= 0) continue;
+    markers.push({
+      x: beam.x2,
+      y: beam.y2,
+      color: beam.color || '#FFE45E',
+      radius: 2.4
+    });
+  }
+
+  return markers;
+}
+
+function drawMinimap() {
+  const mapW = 152;
+  const mapH = 112;
+  const mapX = canvas.width - mapW - 12;
+  const mapY = canvas.height - mapH - 12;
+  const backgroundStep = 4;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(5, 10, 15, 0.92)';
+  ctx.fillRect(mapX, mapY, mapW, mapH);
+
+  for (let y = 0; y < mapH; y += backgroundStep) {
+    for (let x = 0; x < mapW; x += backgroundStep) {
+      const worldX = ((x + backgroundStep * 0.5) / mapW) * WORLD_W;
+      const worldY = ((y + backgroundStep * 0.5) / mapH) * WORLD_H;
+      ctx.fillStyle = worldMap.getMinimapBackgroundColor(worldX, worldY);
+      ctx.fillRect(mapX + x, mapY + y, backgroundStep + 0.2, backgroundStep + 0.2);
+    }
+  }
+
+  const ambientAlpha = dayNightCycle.isNight
+    ? 0.18 + dayNightCycle.glowIntensity * 0.22
+    : 0.04;
+  ctx.fillStyle = `rgba(10, 20, 36, ${ambientAlpha})`;
+  ctx.fillRect(mapX, mapY, mapW, mapH);
+
+  for (const tree of worldMap.trees) {
+    if (!tree || tree.state === 'burnt') continue;
+    const point = worldToMinimap(tree.x, tree.y, mapX, mapY, mapW, mapH);
+    ctx.fillStyle = tree.state === 'burning' ? '#FF8C42' : tree.state === 'stump' ? '#7B5536' : '#4FAE43';
+    ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+  }
+
+  for (const rock of worldMap.rocks) {
+    if (!rock) continue;
+    const point = worldToMinimap(rock.x, rock.y, mapX, mapY, mapW, mapH);
+    ctx.fillStyle = '#B7C2D0';
+    ctx.fillRect(point.x - 1, point.y - 1, 2, 2);
+  }
+
+  for (const enemy of entityManager.enemies) {
+    if (!enemy || enemy.dead) continue;
+    const point = worldToMinimap(enemy.x, enemy.y, mapX, mapY, mapW, mapH);
+    ctx.fillStyle = enemy.passive ? '#E8DFA7' : (enemy.color || '#FF6B6B');
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, enemy.passive ? 1.6 : 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  for (const marker of collectMinimapAbilityMarkers()) {
+    const point = worldToMinimap(marker.x, marker.y, mapX, mapY, mapW, mapH);
+    ctx.fillStyle = marker.color;
+    ctx.globalAlpha = 0.95;
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, marker.radius || 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  const viewportX = mapX + (camera.x / WORLD_W) * mapW;
+  const viewportY = mapY + (camera.y / WORLD_H) * mapH;
+  const viewportW = (camera.viewWidth / WORLD_W) * mapW;
+  const viewportH = (camera.viewHeight / WORLD_H) * mapH;
+  ctx.strokeStyle = 'rgba(140, 200, 255, 0.75)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(viewportX, viewportY, viewportW, viewportH);
+
+  const playerPoint = worldToMinimap(player.x, player.y, mapX, mapY, mapW, mapH);
+  ctx.fillStyle = '#66FF88';
+  ctx.beginPath();
+  ctx.arc(playerPoint.x, playerPoint.y, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(220, 255, 235, 0.9)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(160, 200, 255, 0.55)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(mapX, mapY, mapW, mapH);
+  ctx.fillStyle = '#DCEBFF';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText('MINIMAPA', mapX + 8, mapY + 12);
+  ctx.restore();
+}
+
+function drawAnimatedHudBar(x, y, width, height, value, leftColor, rightColor, label, valueText) {
+  const safe = Math.max(0, Math.min(1, value || 0));
+  const t = performance.now() * 0.004;
+  const pulse = 0.78 + Math.sin(t + y * 0.05) * 0.12;
+
+  const fillWidth = Math.max(0, width * safe);
+  if (fillWidth > 0.5) {
+    const gradient = ctx.createLinearGradient(x, y, x + width, y);
+    gradient.addColorStop(0, leftColor);
+    gradient.addColorStop(1, rightColor);
+    ctx.fillStyle = gradient;
+    ctx.globalAlpha = pulse;
+    ctx.fillRect(x, y, fillWidth, height);
+    ctx.globalAlpha = 1;
+  }
+
+  const shineX = x + (Math.sin(t * 1.4 + y * 0.03) * 0.5 + 0.5) * Math.max(1, fillWidth - 12);
+  if (fillWidth > 10) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+    ctx.fillRect(shineX, y + 1, 10, Math.max(2, height - 2));
+  }
+
+  ctx.fillStyle = '#E8F1FF';
+  ctx.font = 'bold 10px Arial';
+  ctx.textAlign = 'left';
+  ctx.fillText(label, x + 6, y + height - 5);
+  ctx.textAlign = 'right';
+  ctx.fillText(valueText, x + width - 6, y + height - 5);
+  ctx.textAlign = 'left';
+}
+
+function drawTopRightHudBars() {
+  const showNight = !!pauseMenu.showNightBar;
+  const showCast = !!pauseMenu.showCastBar;
+  const rows = [
+    { id: 'time' },
+    ...(showNight ? [{ id: 'night' }] : []),
+    ...(showCast ? [{ id: 'cast' }] : [])
+  ];
+  if (!rows.length) return;
+
+  const panelW = 230;
+  const panelH = 12 + rows.length * 28 + 10;
+  const panelX = canvas.width - panelW - 6;
+  const panelY = 10;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(4, 9, 16, 0.76)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = 'rgba(130, 175, 235, 0.5)';
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+  const timePercent = dayNightCycle.getTimePercentage();
+  const timeLabel = dayNightCycle.getTimeString();
+  const nightPercent = dayNightCycle.isNight ? dayNightCycle.glowIntensity : 0;
+  const castPercent = Math.max(0, Math.min(1, castHudFlash * 2.4));
+
+  let barY = panelY + 10;
+  drawAnimatedHudBar(panelX + 10, barY, panelW - 20, 22, timePercent, '#6BC8FF', '#7F7BFF', 'TIME', timeLabel);
+  barY += 28;
+
+  if (showNight) {
+    drawAnimatedHudBar(
+      panelX + 10,
+      barY,
+      panelW - 20,
+      22,
+      nightPercent,
+      '#4A78FF',
+      '#8D7CFF',
+      'NIGHT',
+      `${Math.round(nightPercent * 100)}%`
+    );
+    barY += 28;
+  }
+
+  if (showCast) {
+    drawAnimatedHudBar(panelX + 10, barY, panelW - 20, 22, castPercent, castColor, '#FFFFFF', 'CAST', castTextTimer > 0 ? 'ACTIVE' : 'READY');
+  }
+
+  ctx.restore();
+}
+
+function drawMainStatsHudBars() {
+  const showEnemies = !!pauseMenu.showEnemiesBar;
+  const showFps = !!pauseMenu.showFpsBar;
+  const showMode = !!pauseMenu.showModeBar;
+
+  const panelW = 246;
+  const rowCount = 3 + (showEnemies ? 1 : 0) + (showFps ? 1 : 0) + (showMode ? 1 : 0);
+  const panelH = 12 + rowCount * 28 + 10;
+  const panelX = 24;
+  const panelY = 10;
+
+  const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
+  const manaRatio = gameState.playerStats.maxMana > 0
+    ? gameState.playerStats.mana / gameState.playerStats.maxMana
+    : 0;
+  const xpRatio = player.xpProgress || 0;
+  const enemiesRatio = Math.min(1, entityManager.enemies.length / 40);
+  const fpsValue = Math.round(1 / Math.max(0.0001, deltaTime));
+  const fpsRatio = Math.max(0, Math.min(1, fpsValue / 60));
+  const modeColor = gameRules.mode === 'creative'
+    ? ['#9DFFB1', '#57D67A']
+    : gameRules.mode === 'peaceful'
+      ? ['#9EE8FF', '#56B6EA']
+      : ['#FFD48A', '#FF9E57'];
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(5, 10, 17, 0.78)';
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = 'rgba(130, 175, 235, 0.48)';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+  let barY = panelY + 10;
+
+  drawAnimatedHudBar(
+    panelX + 10,
+    barY,
+    panelW - 20,
+    22,
+    hpRatio,
+    '#FF8F8F',
+    '#FF5858',
+    'HP',
+    `${Math.ceil(player.hp)}/${player.maxHp}`
+  );
+  barY += 28;
+
+  drawAnimatedHudBar(
+    panelX + 10,
+    barY,
+    panelW - 20,
+    22,
+    manaRatio,
+    '#71C7FF',
+    '#4A7BFF',
+    'MANA',
+    `${gameState.playerStats.mana.toFixed(0)}/${gameState.playerStats.maxMana}`
+  );
+  barY += 28;
+
+  drawAnimatedHudBar(
+    panelX + 10,
+    barY,
+    panelW - 20,
+    22,
+    xpRatio,
+    '#B6FF82',
+    '#73D34E',
+    'XP',
+    `${player.xp}/${player.xpToNext}`
+  );
+  barY += 28;
+
+  if (showEnemies) {
+    drawAnimatedHudBar(
+      panelX + 10,
+      barY,
+      panelW - 20,
+      22,
+      enemiesRatio,
+      '#FFD27A',
+      '#FF8C42',
+      'ENEMIES',
+      `${entityManager.enemies.length}`
+    );
+    barY += 28;
+  }
+
+  if (showFps) {
+    drawAnimatedHudBar(
+      panelX + 10,
+      barY,
+      panelW - 20,
+      22,
+      fpsRatio,
+      '#D0E2FF',
+      '#6FA4FF',
+      'FPS',
+      `${fpsValue}`
+    );
+    barY += 28;
+  }
+
+  if (showMode) {
+    drawAnimatedHudBar(
+      panelX + 10,
+      barY,
+      panelW - 20,
+      16,
+      1,
+      modeColor[0],
+      modeColor[1],
+      'MODE',
+      String(gameRules.mode || 'survival').toUpperCase()
+    );
+  }
+
+  ctx.restore();
+}
 
 function getStarterOrbItemId(elementId) {
   const safe = String(elementId || 'fire').toLowerCase();
@@ -191,6 +589,7 @@ function startGameWithSelection(worldId, characterMeta) {
   player.restore();
   selectedSlot = 0;
   spawnInitialPassiveMobs();
+  setGameMode(gameRules.mode);
   gameStarted = true;
 }
 
@@ -215,6 +614,11 @@ window.addEventListener('keydown', (e) => {
 
   // Inventory UI input handling
   if (inventoryUI.isOpen) {
+    if (key === 'escape') {
+      inventoryUI.toggle();
+      pauseMenu.open();
+      return;
+    }
     inventoryUI.handleKeyInput(key);
     if (key === 'i') {
       inventoryUI.toggle();
@@ -234,16 +638,36 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  if (key === 'escape') {
+    if (pauseMenu.isOpen) {
+      if (pauseMenu.section === 'dev') {
+        pauseMenu.activate('back');
+      } else {
+        pauseMenu.close();
+      }
+    } else {
+      pauseMenu.open();
+      inventoryUI.isOpen = false;
+      inventoryUI.dragging = null;
+    }
+    return;
+  }
+
+  if (pauseMenu.isOpen) {
+    const action = pauseMenu.handleKeyPress(key);
+    if (action) handlePauseMenuAction(action);
+    return;
+  }
+
   // Normal gameplay input
   if (key === 'w') input.w = true;
   if (key === 'a') input.a = true;
   if (key === 's') input.s = true;
   if (key === 'd') input.d = true;
 
-  // Space spawns enemy at cursor position (world coords).
+  // Space makes the player jump.
   if (key === ' ') {
-    const wp = camera.toWorld(input.mouseX, input.mouseY);
-    entityManager.spawnEnemy(wp.x, wp.y);
+    player.jump();
     return;
   }
 
@@ -275,7 +699,7 @@ window.addEventListener('keyup', (e) => {
 });
 
 canvas.addEventListener('mousemove', (e) => {
-  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen || pauseMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   input.mouseX = e.clientX - rect.left;
   input.mouseY = e.clientY - rect.top;
@@ -287,7 +711,7 @@ canvas.addEventListener('mousemove', (e) => {
 
 // Start drag on mousedown when clicking inventory items/abilities
 canvas.addEventListener('mousedown', (e) => {
-  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen || pauseMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
@@ -330,7 +754,7 @@ canvas.addEventListener('mousedown', (e) => {
 
 // End drag on mouseup and apply to hotbar if dropped there
 canvas.addEventListener('mouseup', (e) => {
-  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen || pauseMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   const upX = e.clientX - rect.left;
   const upY = e.clientY - rect.top;
@@ -446,6 +870,12 @@ canvas.addEventListener('click', (e) => {
   }
 
   if (worldSelectMenu.isOpen) return;
+
+  if (pauseMenu.isOpen) {
+    const action = pauseMenu.handleClick(clickX, clickY);
+    if (action) handlePauseMenuAction(action);
+    return;
+  }
 
   // Route clicks to inventory when open
   if (inventoryUI.isOpen) {
@@ -576,7 +1006,7 @@ canvas.addEventListener('click', (e) => {
       if (dist < 40) {
         const castSuccess = combatEngine.executeAbility(
           abilityId,
-          { playerStats: gameState.playerStats, x: player.x, y: player.y },
+          { playerStats: gameState.playerStats, x: player.x, y: player.y, z: player.z || 0, vz: player.vz || 0 },
           enemy,
           gameState
         );
@@ -601,7 +1031,7 @@ canvas.addEventListener('click', (e) => {
     if (abilityId && FREE_CAST_ABILITIES.has(abilityId)) {
       const castSuccess = combatEngine.executeAbility(
         abilityId,
-        { playerStats: gameState.playerStats, x: player.x, y: player.y },
+        { playerStats: gameState.playerStats, x: player.x, y: player.y, z: player.z || 0, vz: player.vz || 0 },
         { x: worldX, y: worldY, vx: 0, vy: 0 },
         gameState
       );
@@ -673,6 +1103,7 @@ canvas.addEventListener('contextmenu', (e) => {
 // ========== UPDATE FUNCTION ==========
 function update(dt) {
   if (!gameStarted) return;
+  if (pauseMenu.isOpen) return;
 
   // Update day/night cycle
   dayNightCycle.update(dt);
@@ -690,9 +1121,10 @@ function update(dt) {
   
   // EntityManager handles spawning (day passive animals, night hostile groups)
   
-  entityManager.update(dt, input, player, worldMap, dayNightCycle);
+  entityManager.update(dt, input, player, worldMap, dayNightCycle, gameRules);
   combatEngine.setCombatContext(entityManager.enemies, player, worldMap);
   worldMap.applyPuddleEffects(player, entityManager.enemies, dt);
+  physicsSystem.resolveWorldCollisions();
 
   // Auto-pickup nearby drops
   const drops = worldMap.collectDrops(player, 36);
@@ -746,6 +1178,10 @@ function draw() {
   entityManager.draw(ctx, camera);
   player.draw(ctx, camera);
 
+  if (pauseMenu.showHitboxes) {
+    physicsSystem.drawHitboxOverlay(ctx, camera);
+  }
+
   // Draw combat effects
   combatEngine.drawSlashes(ctx, camera);
   combatEngine.drawProjectiles(ctx, camera);
@@ -768,21 +1204,9 @@ function draw() {
   }
 
   // Draw HUD
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 14px Arial';
-  ctx.fillText(`HP: ${Math.ceil(player.hp)}/${player.maxHp}`, 10, 20);
-  ctx.fillText(`Mana: ${gameState.playerStats.mana.toFixed(0)}/${gameState.playerStats.maxMana}`, 10, 40);
-  ctx.fillText(`Enemies: ${entityManager.enemies.length}`, 10, 60);
-  ctx.fillText(`Lv: ${player.level}  XP: ${player.xp}/${player.xpToNext}`, 10, 80);
-  ctx.fillText(`Items: ${Object.keys(gameState.inventory.items).length}`, 10, 100);
-  ctx.fillText(`FPS: ${Math.round(1 / Math.max(0.0001, deltaTime))}`, 10, 120);
+  drawMainStatsHudBars();
 
-  // Day/Night info
-  const timeStr = dayNightCycle.getTimeString();
-  const dayNightText = dayNightCycle.isNight ? '🌙 NIGHT' : '☀️  DAY';
-  ctx.fillStyle = dayNightCycle.isNight ? '#4488FF' : '#FFAA44';
-  ctx.font = 'bold 12px Arial';
-  ctx.fillText(`${dayNightText}  ${timeStr}`, canvas.width - 140, 20);
+  drawTopRightHudBars();
 
   // Crafting status
   if (craftingSystem.isCrafting && craftingSystem.currentRecipe) {
@@ -807,36 +1231,13 @@ function draw() {
     ctx.textAlign = 'left';
   }
 
-  // Cast feedback in HUD
-  if (castHudFlash > 0) {
-    const panelX = canvas.width - 260;
-    const panelY = 40;
-    const panelW = 240;
-    const panelH = 28;
-    ctx.save();
-    ctx.globalAlpha = castHudFlash;
-    ctx.fillStyle = castColor;
-    ctx.fillRect(panelX, panelY, panelW, panelH);
-    ctx.globalAlpha = Math.min(1, castHudFlash + 0.45);
-    ctx.fillStyle = '#0b1020';
-    ctx.font = 'bold 12px Arial';
-    ctx.fillText(castText || 'Cast', panelX + 8, panelY + 18);
-    ctx.restore();
-  }
-
-  if (castTextTimer > 0) {
-    ctx.fillStyle = castColor;
-    ctx.font = 'bold 14px Arial';
-    ctx.fillText(castText, canvas.width - 250, 90);
-  }
-
   // Draw notifications
   ctx.font = '12px Arial';
   ctx.textAlign = 'left';
   gameState.notifications.forEach((notif, index) => {
     ctx.fillStyle = notif.color;
     ctx.globalAlpha = 1 - (notif.elapsed / notif.duration);
-    ctx.fillText(notif.message, 10, 140 + index * 20);
+    ctx.fillText(notif.message, 10, 198 + index * 20);
     ctx.globalAlpha = 1;
   });
 
@@ -848,22 +1249,12 @@ function draw() {
   // Inventory panel (screen-space)
   inventoryUI.draw(ctx, canvas);
 
-  // Mini map
-  const mapW = 140;
-  const mapH = 100;
-  const mapX = canvas.width - mapW - 12;
-  const mapY = canvas.height - mapH - 12;
-  ctx.fillStyle = 'rgba(5, 10, 15, 0.85)';
-  ctx.fillRect(mapX, mapY, mapW, mapH);
-  ctx.strokeStyle = 'rgba(160, 200, 255, 0.45)';
-  ctx.strokeRect(mapX, mapY, mapW, mapH);
-  const px = mapX + (player.x / WORLD_W) * mapW;
-  const py = mapY + (player.y / WORLD_H) * mapH;
-  ctx.fillStyle = '#66FF88';
-  ctx.beginPath();
-  ctx.arc(px, py, 3, 0, Math.PI * 2);
-  ctx.fill();
+  drawMinimap();
   ctx.textAlign = 'left';
+
+  if (pauseMenu.isOpen) {
+    pauseMenu.draw(ctx, canvas);
+  }
 }
 
 // ========== GAME LOOP ==========
@@ -881,8 +1272,9 @@ function gameLoop(currentTime) {
 // ========== INIT ==========
 function init() {
   console.log('Game initialized - Fase 3');
-  console.log('WASD move, I inventory, right-click trees to harvest, SPACE spawns enemy at cursor, click to cast');
+  console.log('WASD move, SPACE jump, ESC pause menu, I inventory, right-click trees to harvest, click to cast');
   console.log('Select world, then select/create character slot');
+  setGameMode('survival');
   gameState.equipAbility(0, 'basicAttack');
   gameState.equipAbility(1, 'fireball');
   requestAnimationFrame(gameLoop);

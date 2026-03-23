@@ -28,10 +28,13 @@ export class CombatEngine {
     const ability = this.gameData.abilities.find(a => a.id === abilityId);
     if (!ability) return false;
 
-    const cooldown = gameState.getCooldown(abilityId);
-    if (cooldown > 0) return false;
+    const gameMode = gameState.gameMode || 'survival';
+    const isCreative = gameMode === 'creative';
 
-    if (fromPlayer.playerStats.mana < ability.manaCost) return false;
+    const cooldown = gameState.getCooldown(abilityId);
+    if (!isCreative && cooldown > 0) return false;
+
+    if (!isCreative && fromPlayer.playerStats.mana < ability.manaCost) return false;
 
     const distance = Math.sqrt(
       Math.pow(toTarget.x - fromPlayer.x, 2) +
@@ -42,15 +45,15 @@ export class CombatEngine {
     if (!ability.slash && !ability.projectile && !ability.chainLightning && distance > (ability.range || 9999)) return false;
 
     if (ability.slash) {
-      fromPlayer.playerStats.mana -= ability.manaCost;
-      gameState.setCooldown(abilityId, ability.cooldown);
+      if (!isCreative) fromPlayer.playerStats.mana -= ability.manaCost;
+      if (!isCreative) gameState.setCooldown(abilityId, ability.cooldown);
       this.spawnSlash(fromPlayer, toTarget, ability);
       return true;
     }
 
     if (ability.projectile) {
-      fromPlayer.playerStats.mana -= ability.manaCost;
-      gameState.setCooldown(abilityId, ability.cooldown);
+      if (!isCreative) fromPlayer.playerStats.mana -= ability.manaCost;
+      if (!isCreative) gameState.setCooldown(abilityId, ability.cooldown);
       this.spawnProjectile(fromPlayer, toTarget, ability);
       return true;
     }
@@ -58,29 +61,29 @@ export class CombatEngine {
     if (ability.chainLightning) {
       const success = this.castChainLightning(fromPlayer, toTarget, ability);
       if (!success) return false;
-      fromPlayer.playerStats.mana -= ability.manaCost;
-      gameState.setCooldown(abilityId, ability.cooldown);
+      if (!isCreative) fromPlayer.playerStats.mana -= ability.manaCost;
+      if (!isCreative) gameState.setCooldown(abilityId, ability.cooldown);
       return true;
     }
 
     if (ability.id === 'airslash') {
       const success = this.castAirSlash(fromPlayer, toTarget, ability);
       if (!success) return false;
-      fromPlayer.playerStats.mana -= ability.manaCost;
-      gameState.setCooldown(abilityId, ability.cooldown);
+      if (!isCreative) fromPlayer.playerStats.mana -= ability.manaCost;
+      if (!isCreative) gameState.setCooldown(abilityId, ability.cooldown);
       return true;
     }
 
     if (ability.earthSpike) {
       const success = this.castEarthSpike(fromPlayer, toTarget, ability);
       if (!success) return false;
-      fromPlayer.playerStats.mana -= ability.manaCost;
-      gameState.setCooldown(abilityId, ability.cooldown);
+      if (!isCreative) fromPlayer.playerStats.mana -= ability.manaCost;
+      if (!isCreative) gameState.setCooldown(abilityId, ability.cooldown);
       return true;
     }
 
-    fromPlayer.playerStats.mana -= ability.manaCost;
-    gameState.setCooldown(abilityId, ability.cooldown);
+    if (!isCreative) fromPlayer.playerStats.mana -= ability.manaCost;
+    if (!isCreative) gameState.setCooldown(abilityId, ability.cooldown);
 
     const damageDealt = this.calculateDamage(ability);
 
@@ -105,7 +108,7 @@ export class CombatEngine {
     const depth  = ability.slashDepth || 70;
     const width  = ability.slashWidth || 50;
     const life   = ability.slashLife  || 0.16;
-    this.slashes.push({ x: fromPlayer.x, y: fromPlayer.y, angle, depth, width, life, maxLife: life, ability });
+    this.slashes.push({ x: fromPlayer.x, y: fromPlayer.y, z: fromPlayer.z || 0, angle, depth, width, life, maxLife: life, ability });
   }
 
   updateSlashes(dt, enemies) {
@@ -144,7 +147,7 @@ export class CombatEngine {
     for (const s of this.slashes) {
       const progress = s.life / s.maxLife; // 1 → 0
       const cx = s.x + Math.cos(s.angle) * s.depth * 0.5 - camX;
-      const cy = s.y + Math.sin(s.angle) * s.depth * 0.5 - camY;
+      const cy = s.y + Math.sin(s.angle) * s.depth * 0.5 - camY - (s.z || 0);
       ctx.save();
       ctx.globalAlpha = progress * 0.82;
       ctx.translate(cx, cy);
@@ -168,6 +171,7 @@ export class CombatEngine {
     const speed  = ability.projectileSpeed  || 400;
     const radius = ability.projectileRadius || 6;
     const life   = ability.projectileLife   || 1.5;
+    const sourceZ = fromPlayer.z || 0;
     this.projectiles.push({
       x: fromPlayer.x,
       y: fromPlayer.y,
@@ -176,9 +180,9 @@ export class CombatEngine {
       radius,
       life,
       maxLife: life,
-      z: 0,
-      vz: ability.parabolic ? (ability.arcHeight || 95) : 0,
-      gravity: ability.parabolic ? Math.max(260, (ability.arcHeight || 95) * 2.35) : 0,
+      z: sourceZ,
+      vz: ability.parabolic ? (ability.arcHeight || 95) : Math.max(0, (fromPlayer.vz || 0) * 0.35),
+      gravity: (ability.parabolic || sourceZ > 0) ? Math.max(260, (ability.arcHeight || 95) * 2.35) : 0,
       ability
     });
   }
@@ -190,7 +194,7 @@ export class CombatEngine {
       projectile.y += projectile.vy * dt;
       projectile.life -= dt;
 
-      if (projectile.ability.parabolic) {
+      if (projectile.ability.parabolic || (projectile.z || 0) > 0 || (projectile.vz || 0) > 0) {
         projectile.vz -= (projectile.gravity || 0) * dt;
         projectile.z = Math.max(0, (projectile.z || 0) + projectile.vz * dt);
       }
@@ -442,12 +446,12 @@ export class CombatEngine {
       const dmg = this.calculateDamage({ ...ability, baseDamage: ability.baseDamage * Math.max(0.45, falloff) });
       enemy.takeDamage(dmg);
       this.applyParalyze(enemy, ability.paralyzeDuration || 1.2);
-      this.spawnDamageFloat(enemy.x, enemy.y, dmg, '#FFE45E');
+      this.spawnDamageFloat(enemy.x, enemy.y - (enemy.z || 0), dmg, '#FFE45E');
       this.lightningBeams.push({
         x1: prevX,
-        y1: prevY,
+        y1: prevY - (i === 0 ? (fromPlayer.z || 0) : 0),
         x2: enemy.x,
-        y2: enemy.y,
+        y2: enemy.y - (enemy.z || 0),
         life: 0.18,
         maxLife: 0.18,
         color: ability.projectileColor || '#FFE45E'
@@ -685,7 +689,7 @@ export class CombatEngine {
       } else {
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(projectile.x - camX, projectile.y - camY, projectile.radius, 0, Math.PI * 2);
+        ctx.arc(projectile.x - camX, projectile.y - camY - (projectile.z || 0), projectile.radius + Math.min(4, (projectile.z || 0) * 0.015), 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.strokeStyle = 'rgba(255,255,255,0.5)';

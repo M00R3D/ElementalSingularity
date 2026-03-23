@@ -1,3 +1,5 @@
+import { buildHitboxProfile, ENEMY_HITBOX_TEMPLATES } from './PhysicsConfig.js';
+
 export class EntityManager {
   constructor(gameData = null) {
     this.gameData   = gameData;
@@ -11,7 +13,29 @@ export class EntityManager {
     this._nightCooldown = 0; // cooldown between night-group spawns
   }
 
-  update(dt, input, realPlayer = null, worldMap = null, dayNightCycle = null) {
+  createEnemyHitboxDefinition(typeId, radius) {
+    const kind = String(typeId || 'goblin').toLowerCase();
+    const template = ENEMY_HITBOX_TEMPLATES[kind] || ENEMY_HITBOX_TEMPLATES.default;
+    return buildHitboxProfile(template, radius);
+  }
+
+  getHitboxesFor(entity) {
+    const offsets = entity.hitboxOffsets || [{ x: 0, y: 0 }];
+    const radii = entity.hitboxRadii || [entity.radius || 10];
+    const zOffsets = entity.hitboxZOffsets || new Array(offsets.length).fill(0);
+    const heights = entity.hitboxHeights || new Array(offsets.length).fill(entity.radius || 10);
+    return offsets.map((offset, index) => ({
+      x: entity.x + (offset.x || 0),
+      y: entity.y + (offset.y || 0),
+      z: (entity.z || 0) + (zOffsets[index] || 0),
+      radius: radii[index] || entity.radius || 10,
+      height: heights[index] || entity.radius || 10
+    }));
+  }
+
+  update(dt, input, realPlayer = null, worldMap = null, dayNightCycle = null, gameRules = null) {
+    const mode = gameRules && gameRules.mode ? gameRules.mode : 'survival';
+    const hostilesEnabled = mode === 'survival';
     this.player.vx = 0;
     this.player.vy = 0;
 
@@ -158,9 +182,9 @@ export class EntityManager {
       if (spd > maxSpd) { enemy.vx = (enemy.vx / spd) * maxSpd; enemy.vy = (enemy.vy / spd) * maxSpd; }
 
       // Ataque del enemigo al jugador con cooldown (hostiles only)
-      if (!enemy.passive && enemy.stunTime <= 0) {
+      if (hostilesEnabled && !enemy.passive && enemy.stunTime <= 0) {
         enemy.attackCooldown = Math.max(0, (enemy.attackCooldown || 0) - dt);
-        if (tdist <= (enemy.attackRange || 26) && enemy.attackCooldown <= 0 && target.takeDamage) {
+        if (tdist <= (enemy.attackRange || 26) && enemy.attackCooldown <= 0 && target.takeDamage && !target.isAirborne) {
           target.takeDamage(enemy.attackDamage || 6);
           if (target.applyKnockback) target.applyKnockback(enemy.x, enemy.y, 270);
           enemy.attackCooldown = enemy.attackCooldownMax || 1.5;
@@ -213,7 +237,7 @@ export class EntityManager {
     const baseX = Math.max(30, Math.min(this.width  - 30, spawnTarget.x + Math.cos(angle) * dist));
     const baseY = Math.max(30, Math.min(this.height - 30, spawnTarget.y + Math.sin(angle) * dist));
 
-    if (dayNightCycle && dayNightCycle.isNight) {
+    if (hostilesEnabled && dayNightCycle && dayNightCycle.isNight) {
       // Night: spawn groups of 2-3 hostiles every 10 seconds (if under cap)
       // Count only hostile enemies for the night cap (exclude passive animals)
       const nightCap = Math.min(this.maxEnemies, 10);
@@ -577,10 +601,28 @@ export class EntityManager {
       fallDamage: 0,
       recoveredInAir: false,
       reactionRate: 0.55,
+      hitboxOffsets: [],
+      hitboxRadii: [],
+      hitboxZOffsets: [],
+      hitboxHeights: [],
       xpValue:    xpVal,
       lootItem:   lootId,
       lootChance: lootCh,
       typeId,
+      collisionKind: 'enemy',
+      getHitboxes() {
+        const offsets = this.hitboxOffsets || [{ x: 0, y: 0 }];
+        const radii = this.hitboxRadii || [this.radius || 10];
+        const zOffsets = this.hitboxZOffsets || new Array(offsets.length).fill(0);
+        const heights = this.hitboxHeights || new Array(offsets.length).fill(this.radius || 10);
+        return offsets.map((offset, index) => ({
+          x: this.x + (offset.x || 0),
+          y: this.y + (offset.y || 0),
+          z: (this.z || 0) + (zOffsets[index] || 0),
+          radius: radii[index] || this.radius || 10,
+          height: heights[index] || this.radius || 10
+        }));
+      },
       applyParalyze(duration = 0.8) {
         this.stunTime = Math.max(this.stunTime || 0, duration);
       },
@@ -611,6 +653,11 @@ export class EntityManager {
         }
       }
     };
+    const hitboxDef = this.createEnemyHitboxDefinition(typeId, radius);
+    enemy.hitboxOffsets = hitboxDef.hitboxOffsets;
+    enemy.hitboxRadii = hitboxDef.hitboxRadii;
+    enemy.hitboxZOffsets = hitboxDef.hitboxZOffsets;
+    enemy.hitboxHeights = hitboxDef.hitboxHeights;
     this.enemies.push(enemy);
     return enemy;
   }

@@ -1,6 +1,7 @@
 export class GameStateManager {
   constructor() {
     this.playerStats = { hp: 100, maxHp: 100, mana: 50, maxMana: 50 };
+    this.gameMode = 'survival';
     this.inventory = { items: {}, orbs: {}, materials: {} };
     this.unlockedElements = [];
     this.hotbar = [

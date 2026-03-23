@@ -3,6 +3,8 @@
 // Handles: movement, collision, health, element
 // ========================================
 
+import { buildHitboxProfile, PLAYER_HITBOX_TEMPLATE } from './PhysicsConfig.js';
+
 export class PlayerController {
   constructor(x = 1200, y = 900, worldWidth = 2400, worldHeight = 1800) {
     // Position & Velocity
@@ -11,6 +13,7 @@ export class PlayerController {
     this.vx = 0;
     this.vy = 0;
     this.radius = 15;
+    this.collisionKind = 'player';
 
     // World bounds
     this.worldWidth  = worldWidth;
@@ -54,6 +57,13 @@ export class PlayerController {
     this.slipFriction = 0.9;
     this.stunTime = 0;
     this.limbPhase = 0; // for hands/feet animation
+    this.z = 0;
+    this.vz = 0;
+    this.jumpGravity = 980;
+    this.jumpStrength = 460;
+    this.isJumping = false;
+
+    this.updateHitboxDefinitions();
   }
 
   applyCharacterMetadata(meta = {}) {
@@ -65,6 +75,29 @@ export class PlayerController {
     this.radius = Math.max(10, Math.min(24, Number(next.size) || 15));
     this.color = next.color || this.color;
     this.equippedElement = next.starterElement || this.equippedElement;
+    this.updateHitboxDefinitions();
+  }
+
+  updateHitboxDefinitions() {
+    const profile = buildHitboxProfile(PLAYER_HITBOX_TEMPLATE, this.radius);
+    this.hitboxOffsets = profile.hitboxOffsets;
+    this.hitboxRadii = profile.hitboxRadii;
+    this.hitboxZOffsets = profile.hitboxZOffsets;
+    this.hitboxHeights = profile.hitboxHeights;
+  }
+
+  getHitboxes() {
+    const offsets = this.hitboxOffsets || [];
+    const radii = this.hitboxRadii || [];
+    const zOffsets = this.hitboxZOffsets || [];
+    const heights = this.hitboxHeights || [];
+    return offsets.map((offset, index) => ({
+      x: this.x + (offset.x || 0),
+      y: this.y + (offset.y || 0),
+      z: this.z + (zOffsets[index] || 0),
+      radius: radii[index] || this.radius,
+      height: heights[index] || this.radius
+    }));
   }
 
   // ========== MOVEMENT ==========
@@ -100,6 +133,17 @@ export class PlayerController {
     this.x = Math.max(this.radius, Math.min(this.worldWidth  - this.radius, this.x));
     this.y = Math.max(this.radius, Math.min(this.worldHeight - this.radius, this.y));
 
+    // Jump physics on the Z axis.
+    if (this.isJumping || this.z > 0) {
+      this.vz -= this.jumpGravity * dt;
+      this.z += this.vz * dt;
+      if (this.z <= 0) {
+        this.z = 0;
+        this.vz = 0;
+        this.isJumping = false;
+      }
+    }
+
     // Decay cast pulse effect.
     this.castPulse = Math.max(0, this.castPulse - dt * 2.8);
     // advance limb animation phase based on movement speed
@@ -111,13 +155,27 @@ export class PlayerController {
   draw(ctx, camera = null) {
     if (!this.isAlive) return;
     const sx = this.x - (camera ? camera.x : 0);
-    const sy = this.y - (camera ? camera.y : 0);
+    const syGround = this.y - (camera ? camera.y : 0);
+    const sy = syGround - this.z;
+    const airScale = 1 + Math.min(0.34, this.z / 260);
+
+    // Ground shadow gets smaller as the player rises.
+    const shadowScale = Math.max(0.58, 1 - this.z / 240);
+    const shadowAlpha = Math.max(0.12, 0.26 - this.z / 1800);
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${shadowAlpha})`;
+    ctx.beginPath();
+    ctx.ellipse(sx, syGround + this.radius * 0.65, this.radius * shadowScale, this.radius * 0.46 * shadowScale, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     // Body with slight squash/stretch deformation based on movement and cast
-    const deform = 1 + Math.sin(this.limbPhase) * 0.03 + this.castPulse * 0.12;
     ctx.save();
     ctx.translate(sx, sy);
-    ctx.scale(1 + (Math.sin(this.limbPhase) * 0.02), 1 - (Math.abs(Math.sin(this.limbPhase)) * 0.03) + this.castPulse * 0.06);
+    ctx.scale(
+      airScale * (1 + (Math.sin(this.limbPhase) * 0.02)),
+      airScale * (1 - (Math.abs(Math.sin(this.limbPhase)) * 0.03) + this.castPulse * 0.06)
+    );
     ctx.fillStyle = this.color;
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
@@ -131,7 +189,7 @@ export class PlayerController {
       ctx.strokeStyle = this.castColor;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(sx, sy, this.radius + 8 + (1 - this.castPulse) * 10, 0, Math.PI * 2);
+      ctx.arc(sx, sy, (this.radius * airScale) + 8 + (1 - this.castPulse) * 10, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -139,8 +197,9 @@ export class PlayerController {
     // Draw limbs: larger and closer to body for a chunkier look
     const phase = this.limbPhase || 0;
     const swing = Math.sin(phase) * 4;
-    const offset = this.radius + 4; // bring limbs closer
-    const limbSize = 6; // slightly larger
+    const drawRadius = this.radius * airScale;
+    const offset = drawRadius + 4;
+    const limbSize = Math.max(4, 6 * airScale);
     ctx.fillStyle = this.castColor || '#FFFFFF';
     // left arm
     ctx.beginPath(); ctx.arc(sx - offset + swing, sy - offset - swing * 0.5, limbSize, 0, Math.PI * 2); ctx.fill();
@@ -158,25 +217,25 @@ export class PlayerController {
       ctx.fillStyle = hairColor;
       if (hairStyle === 'short') {
         ctx.beginPath();
-        ctx.arc(sx, sy - this.radius * 0.85, this.radius * 0.55, Math.PI, Math.PI * 2);
+        ctx.arc(sx, sy - drawRadius * 0.85, drawRadius * 0.55, Math.PI, Math.PI * 2);
         ctx.fill();
       } else if (hairStyle === 'spike') {
         ctx.beginPath();
-        ctx.moveTo(sx - this.radius * 0.65, sy - this.radius * 0.35);
-        ctx.lineTo(sx - this.radius * 0.2, sy - this.radius * 1.15);
-        ctx.lineTo(sx + this.radius * 0.1, sy - this.radius * 0.45);
-        ctx.lineTo(sx + this.radius * 0.4, sy - this.radius * 1.2);
-        ctx.lineTo(sx + this.radius * 0.7, sy - this.radius * 0.35);
+        ctx.moveTo(sx - drawRadius * 0.65, sy - drawRadius * 0.35);
+        ctx.lineTo(sx - drawRadius * 0.2, sy - drawRadius * 1.15);
+        ctx.lineTo(sx + drawRadius * 0.1, sy - drawRadius * 0.45);
+        ctx.lineTo(sx + drawRadius * 0.4, sy - drawRadius * 1.2);
+        ctx.lineTo(sx + drawRadius * 0.7, sy - drawRadius * 0.35);
         ctx.closePath();
         ctx.fill();
       } else if (hairStyle === 'mohawk') {
-        ctx.fillRect(sx - this.radius * 0.12, sy - this.radius * 1.25, this.radius * 0.24, this.radius * 0.95);
+        ctx.fillRect(sx - drawRadius * 0.12, sy - drawRadius * 1.25, drawRadius * 0.24, drawRadius * 0.95);
       } else if (hairStyle === 'long') {
         ctx.beginPath();
-        ctx.arc(sx, sy - this.radius * 0.45, this.radius * 0.72, Math.PI, Math.PI * 2);
+        ctx.arc(sx, sy - drawRadius * 0.45, drawRadius * 0.72, Math.PI, Math.PI * 2);
         ctx.fill();
-        ctx.fillRect(sx - this.radius * 0.72, sy - this.radius * 0.5, this.radius * 0.22, this.radius * 1.0);
-        ctx.fillRect(sx + this.radius * 0.5, sy - this.radius * 0.5, this.radius * 0.22, this.radius * 1.0);
+        ctx.fillRect(sx - drawRadius * 0.72, sy - drawRadius * 0.5, drawRadius * 0.22, drawRadius * 1.0);
+        ctx.fillRect(sx + drawRadius * 0.5, sy - drawRadius * 0.5, drawRadius * 0.22, drawRadius * 1.0);
       }
     }
 
@@ -184,7 +243,7 @@ export class PlayerController {
     const accessory = this.characterMeta.accessory || 'none';
     if (accessory === 'bandana') {
       ctx.fillStyle = '#d13d3d';
-      ctx.fillRect(sx - this.radius * 0.78, sy - this.radius * 0.62, this.radius * 1.56, this.radius * 0.23);
+      ctx.fillRect(sx - drawRadius * 0.78, sy - drawRadius * 0.62, drawRadius * 1.56, drawRadius * 0.23);
     } else if (accessory === 'glasses') {
       ctx.strokeStyle = '#101010';
       ctx.lineWidth = 1.6;
@@ -198,16 +257,16 @@ export class PlayerController {
       ctx.strokeStyle = '#ffd56a';
       ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.arc(sx + this.radius * 0.95, sy - 1, 2.1, 0, Math.PI * 2);
+      ctx.arc(sx + drawRadius * 0.95, sy - 1, 2.1 * airScale, 0, Math.PI * 2);
       ctx.stroke();
     } else if (accessory === 'crown') {
       ctx.fillStyle = '#f2cb33';
       ctx.beginPath();
-      ctx.moveTo(sx - this.radius * 0.7, sy - this.radius * 0.72);
-      ctx.lineTo(sx - this.radius * 0.35, sy - this.radius * 1.2);
-      ctx.lineTo(sx, sy - this.radius * 0.74);
-      ctx.lineTo(sx + this.radius * 0.35, sy - this.radius * 1.2);
-      ctx.lineTo(sx + this.radius * 0.7, sy - this.radius * 0.72);
+      ctx.moveTo(sx - drawRadius * 0.7, sy - drawRadius * 0.72);
+      ctx.lineTo(sx - drawRadius * 0.35, sy - drawRadius * 1.2);
+      ctx.lineTo(sx, sy - drawRadius * 0.74);
+      ctx.lineTo(sx + drawRadius * 0.35, sy - drawRadius * 1.2);
+      ctx.lineTo(sx + drawRadius * 0.7, sy - drawRadius * 0.72);
       ctx.closePath();
       ctx.fill();
     }
@@ -215,8 +274,8 @@ export class PlayerController {
     // Face: eyes and mouth reflecting state
     const faceY = sy - 2;
     const eyeType = this.characterMeta.eyeType || 'round';
-    const eyeOffset = Math.max(5, this.radius * 0.4);
-    const eyeSize = Math.max(1.8, this.radius * 0.14);
+    const eyeOffset = Math.max(5, drawRadius * 0.4);
+    const eyeSize = Math.max(1.8, drawRadius * 0.14);
     // Expression: hurt if low hp, focused if casting
     const hurt = (this.hp / this.maxHp) < 0.4;
     ctx.fillStyle = '#000000';
@@ -260,14 +319,14 @@ export class PlayerController {
     }
     ctx.stroke();
 
-    this.drawHealthBar(ctx, sx, sy);
+    this.drawHealthBar(ctx, sx, sy, drawRadius);
   }
 
-  drawHealthBar(ctx, sx, sy) {
+  drawHealthBar(ctx, sx, sy, drawRadius = this.radius) {
     const barWidth = 40;
     const barHeight = 5;
     const barX = sx - barWidth / 2;
-    const barY = sy - this.radius - 12;
+    const barY = sy - drawRadius - 12;
 
     // Background (gray)
     ctx.fillStyle = '#333333';
@@ -320,6 +379,19 @@ export class PlayerController {
     const dx = this.x - x;
     const dy = this.y - y;
     return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  jump() {
+    if (!this.isAlive) return false;
+    if (this.stunTime > 0) return false;
+    if (this.isJumping || this.z > 1) return false;
+    this.isJumping = true;
+    this.vz = this.jumpStrength;
+    return true;
+  }
+
+  get isAirborne() {
+    return this.z > 8;
   }
 
   // ========== EQUIPMENT ==========
@@ -383,12 +455,28 @@ export class PlayerController {
   // ========== COLLISION ==========
   collidingWith(other) {
     if (!this.isAlive) return false;
+    const selfHitboxes = this.getHitboxes();
+    const otherHitboxes = typeof other.getHitboxes === 'function'
+      ? other.getHitboxes()
+      : [{ x: other.x, y: other.y, z: other.z || 0, radius: other.radius, height: other.height || other.radius || 0 }];
 
-    const dx = this.x - other.x;
-    const dy = this.y - other.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    for (const selfHitbox of selfHitboxes) {
+      for (const otherHitbox of otherHitboxes) {
+        const dx = selfHitbox.x - otherHitbox.x;
+        const dy = selfHitbox.y - otherHitbox.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const selfBottom = selfHitbox.z || 0;
+        const selfTop = selfBottom + (selfHitbox.height || 0);
+        const otherBottom = otherHitbox.z || 0;
+        const otherTop = otherBottom + (otherHitbox.height || 0);
+        const overlapZ = Math.min(selfTop, otherTop) > Math.max(selfBottom, otherBottom);
+        if (distance < (selfHitbox.radius + otherHitbox.radius) && overlapZ) {
+          return true;
+        }
+      }
+    }
 
-    return distance < (this.radius + other.radius);
+    return false;
   }
 }
 
