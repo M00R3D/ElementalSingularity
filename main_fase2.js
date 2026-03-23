@@ -16,6 +16,8 @@ import DayNightCycle from './src/core/DayNightCycle.js';
 import WorldManager from './src/core/WorldManager.js';
 import WorldSelectMenu from './src/core/WorldSelectMenu.js';
 import CraftingSystem from './src/core/CraftingSystem.js';
+import CharacterManager from './src/core/CharacterManager.js';
+import CharacterSelectMenu from './src/core/CharacterSelectMenu.js';
 
 // Canvas setup
 const canvas = document.querySelector('canvas');
@@ -27,6 +29,8 @@ canvas.height = 600;
 // World selection
 const worldManager = new WorldManager();
 const worldSelectMenu = new WorldSelectMenu(worldManager);
+const characterManager = new CharacterManager();
+const characterSelectMenu = new CharacterSelectMenu(characterManager, worldManager);
 
 // Time system
 const dayNightCycle = new DayNightCycle(200); // 200 second cycle
@@ -48,6 +52,8 @@ const inventoryUI  = new InventoryUI(GAME_DATA, gameState, player);
 const craftingSystem = new CraftingSystem(GAME_DATA);
 
 let gameStarted = false; // Set to true when world is selected
+let selectedWorldId = null;
+let activeCharacterMeta = null;
 
 // Input state
 const input = { w: false, a: false, s: false, d: false, mouseX: 400, mouseY: 300 };
@@ -60,9 +66,101 @@ let castTextTimer = 0;
 let castColor = '#FFFFFF';
 const FREE_CAST_ABILITIES = new Set(['basicAttack', 'fireball']);
 
+function spawnInitialPassiveMobs() {
+  const cfg = worldManager.getCurrentWorldConfig();
+  const spawnX = cfg.spawnX || WORLD_W / 2;
+  const spawnY = cfg.spawnY || WORLD_H / 2;
+  for (let i = 0; i < 10; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 24 + Math.random() * 220;
+    entityManager.spawnEnemy(
+      Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)),
+      Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)),
+      'cow'
+    );
+  }
+  for (let i = 0; i < 4; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 24 + Math.random() * 160;
+    entityManager.spawnEnemy(
+      Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)),
+      Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)),
+      'chicken'
+    );
+  }
+}
+
+function applyWorldConfig(worldId) {
+  const cfg = worldManager.getWorldConfig(worldId);
+  WORLD_W = cfg.width || GAME_DATA.world.width;
+  WORLD_H = cfg.height || GAME_DATA.world.height;
+
+  worldMap = new WorldMap(cfg);
+  camera = new Camera(WORLD_W, WORLD_H, canvas.width, canvas.height);
+
+  player.worldWidth = WORLD_W;
+  player.worldHeight = WORLD_H;
+  player.x = cfg.spawnX || WORLD_W / 2;
+  player.y = cfg.spawnY || WORLD_H / 2;
+  player.kbx = 0;
+  player.kby = 0;
+
+  entityManager.width = WORLD_W;
+  entityManager.height = WORLD_H;
+  entityManager.enemies = [];
+  entityManager.particles = [];
+  combatEngine.projectiles = [];
+  combatEngine.slashes = [];
+  combatEngine.particles = [];
+  combatEngine.damageFloats = [];
+}
+
+function applyStarterElement(starterElement) {
+  const elementToAbility = {
+    fire: 'fireball',
+    water: 'waterbolt',
+    air: 'airslash',
+    earth: 'basicAttack',
+    lightning: 'basicAttack'
+  };
+  const secondSlotAbility = elementToAbility[starterElement] || 'fireball';
+  gameState.equipAbility(0, 'basicAttack');
+  gameState.equipAbility(1, secondSlotAbility);
+}
+
+function startGameWithSelection(worldId, characterMeta) {
+  applyWorldConfig(worldId);
+  activeCharacterMeta = characterMeta || null;
+  if (activeCharacterMeta) {
+    player.applyCharacterMetadata(activeCharacterMeta);
+    applyStarterElement(activeCharacterMeta.starterElement || 'fire');
+  } else {
+    applyStarterElement('fire');
+  }
+  player.restore();
+  selectedSlot = 0;
+  spawnInitialPassiveMobs();
+  gameStarted = true;
+}
+
 // ========== INPUT SETUP ==========
 window.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
+
+  // Character select menu input
+  if (characterSelectMenu.isOpen) {
+    const result = characterSelectMenu.handleKeyPress(key);
+    if (result) {
+      if (result.action === 'start') {
+        characterSelectMenu.close();
+        startGameWithSelection(selectedWorldId || worldManager.currentWorldId, result.character);
+      } else if (result.action === 'back_world') {
+        characterSelectMenu.close();
+        worldSelectMenu.isOpen = true;
+      }
+    }
+    return;
+  }
 
   // Inventory UI input handling
   if (inventoryUI.isOpen) {
@@ -78,27 +176,11 @@ window.addEventListener('keydown', (e) => {
     if (key === 'arrowup' || key === 'w') worldSelectMenu.handleKeyPress('arrowup');
     if (key === 'arrowdown' || key === 's') worldSelectMenu.handleKeyPress('arrowdown');
     if (key === 'enter') {
-      const selectedId = worldSelectMenu.selectWorld();
-      gameStarted = true;
-      // Spawn initial passive mobs for the world (10 cows, 4 chickens)
-      try {
-        const cfg = worldManager.getCurrentWorldConfig();
-        const spawnX = cfg.spawnX || WORLD_W / 2;
-        const spawnY = cfg.spawnY || WORLD_H / 2;
-        for (let i = 0; i < 10; i++) {
-          const ang = Math.random() * Math.PI * 2;
-          const dist = 24 + Math.random() * 220;
-          entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'cow');
-        }
-        for (let i = 0; i < 4; i++) {
-          const ang = Math.random() * Math.PI * 2;
-          const dist = 24 + Math.random() * 160;
-          entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'chicken');
-        }
-      } catch (e) {
-        // ignore if worldManager not available
-      }
+      selectedWorldId = worldSelectMenu.selectWorld();
+      worldSelectMenu.isOpen = false;
+      characterSelectMenu.open(selectedWorldId);
     }
+    return;
   }
 
   // Normal gameplay input
@@ -142,6 +224,7 @@ window.addEventListener('keyup', (e) => {
 });
 
 canvas.addEventListener('mousemove', (e) => {
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   input.mouseX = e.clientX - rect.left;
   input.mouseY = e.clientY - rect.top;
@@ -153,6 +236,7 @@ canvas.addEventListener('mousemove', (e) => {
 
 // Start drag on mousedown when clicking inventory items/abilities
 canvas.addEventListener('mousedown', (e) => {
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
@@ -195,6 +279,7 @@ canvas.addEventListener('mousedown', (e) => {
 
 // End drag on mouseup and apply to hotbar if dropped there
 canvas.addEventListener('mouseup', (e) => {
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   const upX = e.clientX - rect.left;
   const upY = e.clientY - rect.top;
@@ -288,6 +373,7 @@ canvas.addEventListener('mouseup', (e) => {
 });
 
 canvas.addEventListener('click', (e) => {
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
   const clickY = e.clientY - rect.top;
@@ -477,6 +563,7 @@ canvas.addEventListener('click', (e) => {
 });
 
 canvas.addEventListener('contextmenu', (e) => {
+  if (worldSelectMenu.isOpen || characterSelectMenu.isOpen) return;
   e.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const clickX = e.clientX - rect.left;
@@ -503,28 +590,7 @@ canvas.addEventListener('contextmenu', (e) => {
 
 // ========== UPDATE FUNCTION ==========
 function update(dt) {
-  // If world was just selected (via GUI click), initialize passive mobs and start game
-  if (!gameStarted) {
-    if (worldManager._justChanged) {
-      const cfg = worldManager.getCurrentWorldConfig();
-      const spawnX = cfg.spawnX || WORLD_W / 2;
-      const spawnY = cfg.spawnY || WORLD_H / 2;
-      for (let i = 0; i < 10; i++) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 24 + Math.random() * 220;
-        entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'cow');
-      }
-      for (let i = 0; i < 4; i++) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 24 + Math.random() * 160;
-        entityManager.spawnEnemy(Math.max(30, Math.min(spawnX + Math.cos(ang) * dist, WORLD_W - 30)), Math.max(30, Math.min(spawnY + Math.sin(ang) * dist, WORLD_H - 30)), 'chicken');
-      }
-      worldManager._justChanged = null;
-      gameStarted = true;
-    } else {
-      return;
-    }
-  }
+  if (!gameStarted) return;
 
   // Update day/night cycle
   dayNightCycle.update(dt);
@@ -574,6 +640,11 @@ function draw() {
   // Draw world select menu if open
   if (worldSelectMenu.isOpen) {
     worldSelectMenu.draw(ctx, canvas);
+    return;
+  }
+
+  if (characterSelectMenu.isOpen) {
+    characterSelectMenu.draw(ctx, canvas);
     return;
   }
 
@@ -727,6 +798,7 @@ function gameLoop(currentTime) {
 function init() {
   console.log('Game initialized - Fase 3');
   console.log('WASD move, I inventory, right-click trees to harvest, SPACE spawns enemy at cursor, click to cast');
+  console.log('Select world, then select/create character slot');
   gameState.equipAbility(0, 'basicAttack');
   gameState.equipAbility(1, 'fireball');
   requestAnimationFrame(gameLoop);

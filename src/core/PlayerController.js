@@ -30,6 +30,16 @@ export class PlayerController {
     // Equipment
     this.equippedElement = null;
     this.color = '#FF6347';
+    this.characterMeta = {
+      faceType: 'friendly',
+      size: 15,
+      color: '#FF6347',
+      accessory: 'none',
+      hairStyle: 'short',
+      hairColor: '#4b2e20',
+      eyeType: 'round',
+      starterElement: 'fire'
+    };
 
     // State
     this.isAlive   = true;
@@ -39,6 +49,17 @@ export class PlayerController {
     this.kbx = 0;
     this.kby = 0;
     this.limbPhase = 0; // for hands/feet animation
+  }
+
+  applyCharacterMetadata(meta = {}) {
+    const next = {
+      ...this.characterMeta,
+      ...meta
+    };
+    this.characterMeta = next;
+    this.radius = Math.max(10, Math.min(24, Number(next.size) || 15));
+    this.color = next.color || this.color;
+    this.equippedElement = next.starterElement || this.equippedElement;
   }
 
   // ========== MOVEMENT ==========
@@ -114,16 +135,92 @@ export class PlayerController {
     // right leg
     ctx.beginPath(); ctx.arc(sx + offset - swing * 0.5, sy + offset + swing, limbSize, 0, Math.PI * 2); ctx.fill();
 
+    // Hair style
+    const hairStyle = this.characterMeta.hairStyle || 'none';
+    const hairColor = this.characterMeta.hairColor || '#4b2e20';
+    if (hairStyle !== 'none') {
+      ctx.fillStyle = hairColor;
+      if (hairStyle === 'short') {
+        ctx.beginPath();
+        ctx.arc(sx, sy - this.radius * 0.85, this.radius * 0.55, Math.PI, Math.PI * 2);
+        ctx.fill();
+      } else if (hairStyle === 'spike') {
+        ctx.beginPath();
+        ctx.moveTo(sx - this.radius * 0.65, sy - this.radius * 0.35);
+        ctx.lineTo(sx - this.radius * 0.2, sy - this.radius * 1.15);
+        ctx.lineTo(sx + this.radius * 0.1, sy - this.radius * 0.45);
+        ctx.lineTo(sx + this.radius * 0.4, sy - this.radius * 1.2);
+        ctx.lineTo(sx + this.radius * 0.7, sy - this.radius * 0.35);
+        ctx.closePath();
+        ctx.fill();
+      } else if (hairStyle === 'mohawk') {
+        ctx.fillRect(sx - this.radius * 0.12, sy - this.radius * 1.25, this.radius * 0.24, this.radius * 0.95);
+      } else if (hairStyle === 'long') {
+        ctx.beginPath();
+        ctx.arc(sx, sy - this.radius * 0.45, this.radius * 0.72, Math.PI, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(sx - this.radius * 0.72, sy - this.radius * 0.5, this.radius * 0.22, this.radius * 1.0);
+        ctx.fillRect(sx + this.radius * 0.5, sy - this.radius * 0.5, this.radius * 0.22, this.radius * 1.0);
+      }
+    }
+
+    // Accessory
+    const accessory = this.characterMeta.accessory || 'none';
+    if (accessory === 'bandana') {
+      ctx.fillStyle = '#d13d3d';
+      ctx.fillRect(sx - this.radius * 0.78, sy - this.radius * 0.62, this.radius * 1.56, this.radius * 0.23);
+    } else if (accessory === 'glasses') {
+      ctx.strokeStyle = '#101010';
+      ctx.lineWidth = 1.6;
+      ctx.strokeRect(sx - 7.5, sy - 6.5, 5, 4.8);
+      ctx.strokeRect(sx + 2.5, sy - 6.5, 5, 4.8);
+      ctx.beginPath();
+      ctx.moveTo(sx - 2.5, sy - 4.2);
+      ctx.lineTo(sx + 2.5, sy - 4.2);
+      ctx.stroke();
+    } else if (accessory === 'earring') {
+      ctx.strokeStyle = '#ffd56a';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(sx + this.radius * 0.95, sy - 1, 2.1, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (accessory === 'crown') {
+      ctx.fillStyle = '#f2cb33';
+      ctx.beginPath();
+      ctx.moveTo(sx - this.radius * 0.7, sy - this.radius * 0.72);
+      ctx.lineTo(sx - this.radius * 0.35, sy - this.radius * 1.2);
+      ctx.lineTo(sx, sy - this.radius * 0.74);
+      ctx.lineTo(sx + this.radius * 0.35, sy - this.radius * 1.2);
+      ctx.lineTo(sx + this.radius * 0.7, sy - this.radius * 0.72);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     // Face: eyes and mouth reflecting state
     const faceY = sy - 2;
-    const eyeOffset = 6;
-    const eyeSize = 2.2;
+    const eyeType = this.characterMeta.eyeType || 'round';
+    const eyeOffset = Math.max(5, this.radius * 0.4);
+    const eyeSize = Math.max(1.8, this.radius * 0.14);
     // Expression: hurt if low hp, focused if casting
     const hurt = (this.hp / this.maxHp) < 0.4;
     ctx.fillStyle = '#000000';
     // eyes
-    ctx.beginPath(); ctx.arc(sx - eyeOffset, faceY - 2, eyeSize, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(sx + eyeOffset, faceY - 2, eyeSize, 0, Math.PI * 2); ctx.fill();
+    if (eyeType === 'sharp') {
+      ctx.beginPath(); ctx.ellipse(sx - eyeOffset, faceY - 2.5, eyeSize + 1.2, eyeSize - 0.6, -0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(sx + eyeOffset, faceY - 2.5, eyeSize + 1.2, eyeSize - 0.6, 0.3, 0, Math.PI * 2); ctx.fill();
+    } else if (eyeType === 'sleepy') {
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(sx - eyeOffset - 2, faceY - 2.5); ctx.lineTo(sx - eyeOffset + 2, faceY - 2.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sx + eyeOffset - 2, faceY - 2.5); ctx.lineTo(sx + eyeOffset + 2, faceY - 2.5); ctx.stroke();
+    } else if (eyeType === 'big') {
+      ctx.beginPath(); ctx.arc(sx - eyeOffset, faceY - 2, eyeSize + 1.1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + eyeOffset, faceY - 2, eyeSize + 1.1, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.beginPath(); ctx.arc(sx - eyeOffset, faceY - 2, eyeSize, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(sx + eyeOffset, faceY - 2, eyeSize, 0, Math.PI * 2); ctx.fill();
+    }
+
     // mouth
     ctx.beginPath();
     if (hurt) {
@@ -131,7 +228,19 @@ export class PlayerController {
     } else if (this.castPulse > 0.3) {
       ctx.fillStyle = '#000000'; ctx.fillRect(sx - 6, faceY + 2, 12, 3);
     } else {
-      ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5; ctx.arc(sx, faceY + 2, 6, Math.PI * 0.1, Math.PI * 0.9);
+      const faceType = this.characterMeta.faceType || 'friendly';
+      ctx.strokeStyle = '#000000';
+      if (faceType === 'serious') {
+        ctx.lineWidth = 1.8;
+        ctx.moveTo(sx - 5, faceY + 4);
+        ctx.lineTo(sx + 5, faceY + 4);
+      } else if (faceType === 'grin') {
+        ctx.lineWidth = 1.8;
+        ctx.arc(sx, faceY + 2.5, 7, Math.PI * 0.1, Math.PI * 0.9);
+      } else {
+        ctx.lineWidth = 1.5;
+        ctx.arc(sx, faceY + 2, 6, Math.PI * 0.1, Math.PI * 0.9);
+      }
     }
     ctx.stroke();
 
