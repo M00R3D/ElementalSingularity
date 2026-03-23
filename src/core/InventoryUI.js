@@ -15,17 +15,98 @@ export class InventoryUI {
     this.selectedAbility = null;
     this.selectedItem = null;
     this.selectedHotbarSlot = null;
+    this.dragging = null; // { type: 'ability'|'item', id, dragX, dragY, count }
+    this.mouseX = 0;
+    this.mouseY = 0;
+    this.hovered = null; // { id, count, def, x, y }
   }
 
   toggle() { this.isOpen = !this.isOpen; }
 
   handleKeyInput(key) {
     if (!this.isOpen) return;
-    if (key === 'q') this.tab = 'items';
-    if (key === 'w') this.tab = 'abilities';
-    if (key === 'e') this.tab = 'hotbar';
+    // Removed Q/W/E hotkeys; tab switching via clicks only
     if (key === 'arrowup') this.scrollPos = Math.max(0, this.scrollPos - 20);
     if (key === 'arrowdown') this.scrollPos = Math.min(200, this.scrollPos + 20);
+  }
+
+  // Drag API used by main event handlers
+  // button: 0 left, 2 right
+  startDrag(clickX, clickY, canvasW = 800, canvasH = 600, button = 0) {
+    if (!this.isOpen) return false;
+    // Determine clicked element in current tab and start drag if appropriate
+    const panelW = 500, panelH = 450;
+    const px = Math.floor((canvasW - panelW) / 2);
+    const py = Math.floor((canvasH - panelH) / 2);
+    const contentX = px + 12;
+    const contentY = py + 75;
+
+    if (this.tab === 'abilities') {
+      const abilities = this.gameData.abilities || [];
+      const itemH = 28, padding = 4;
+      let drawY = (contentY + 16) - this.scrollPos; // matches draw offset
+      for (const ab of abilities) {
+        if (clickY >= drawY && clickY <= drawY + itemH && clickX >= contentX && clickX <= contentX + (panelW - 24)) {
+          this.dragging = { type: 'ability', id: ab.id, dragX: clickX, dragY: clickY };
+          this.selectedAbility = ab.id;
+          return true;
+        }
+        drawY += itemH + padding;
+      }
+    } else if (this.tab === 'items') {
+      // Items grid
+      const SLOT = 50, GAP = 6, COLS = 4;
+      let x = contentX;
+      // Account for XP bar at top of items tab (drawItemsTab shifts y when player exists)
+      let y = contentY + ((this.player) ? (30 + 8) : 0);
+      const items = Object.entries(this.gameState.inventory.items || {}).filter(([, c]) => c > 0);
+      let idx = 0;
+      for (let row = 0; row < 6; row++) {
+        for (let col = 0; col < COLS; col++) {
+          const sx = x + col * (SLOT + GAP);
+          const sy = y + row * (SLOT + GAP);
+          if (sy + SLOT > y + (SLOT * 6 + GAP * 5)) break;
+          if (clickX >= sx && clickX <= sx + SLOT && clickY >= sy && clickY <= sy + SLOT) {
+            if (idx < items.length) {
+              const [id, total] = items[idx];
+              const pick = (button === 2) ? 1 : total;
+              // remove immediately from inventory into cursor
+              const have = this.gameState.inventory.items[id] || 0;
+              const actual = Math.min(have, pick);
+              if (actual <= 0) return false;
+              this.gameState.inventory.items[id] = have - actual;
+              if (this.gameState.inventory.items[id] <= 0) delete this.gameState.inventory.items[id];
+              this.dragging = { type: 'item', id, dragX: clickX, dragY: clickY, count: actual, src: 'inventory' };
+              this.selectedItem = id;
+              return true;
+            }
+            return false;
+          }
+          idx++;
+        }
+      }
+    }
+    return false;
+  }
+
+  updateDrag(x, y) {
+    // Always track mouse for hover/tooltips
+    this.mouseX = x;
+    this.mouseY = y;
+    if (!this.dragging) return;
+    this.dragging.dragX = x;
+    this.dragging.dragY = y;
+  }
+
+  endDrag(x, y) {
+    if (!this.dragging) return null;
+    const d = this.dragging;
+    this.dragging = null;
+    const res = { type: d.type, id: d.id, x, y };
+    if (d.slot !== undefined) res.slot = d.slot;
+    if (d.count !== undefined) res.count = d.count;
+    if (d.src !== undefined) res.src = d.src;
+    return res;
   }
 
   draw(ctx, canvas) {
@@ -51,11 +132,11 @@ export class InventoryUI {
 
     ctx.font = '10px Arial';
     ctx.fillStyle = '#667788';
-    ctx.fillText('[I] Close | [Q] Items | [W] Abilities | [E] Hotbar | [↑↓] Scroll', px + panelW / 2, py + 36);
+    ctx.fillText('[I] Cerrar | [↑↓] Scroll | Arrastra a la hotbar inferior', px + panelW / 2, py + 36);
 
     // Tab buttons
-    const tabs = ['items', 'abilities', 'hotbar'];
-    const tabX = [px + 30, px + 150, px + 280];
+    const tabs = ['items', 'abilities'];
+    const tabX = [px + 30, px + 170];
     const tabW = 100, tabH = 20;
     for (let i = 0; i < tabs.length; i++) {
       const active = this.tab === tabs[i];
@@ -80,8 +161,28 @@ export class InventoryUI {
       this.drawItemsTab(ctx, contentX, contentY, contentW, contentH);
     } else if (this.tab === 'abilities') {
       this.drawAbilitiesTab(ctx, contentX, contentY, contentW, contentH);
-    } else if (this.tab === 'hotbar') {
-      this.drawHotbarTab(ctx, contentX, contentY, contentW, contentH);
+    }
+
+    // Draw drag preview if dragging
+    if (this.dragging) {
+      const d = this.dragging;
+      const px = d.dragX + 12;
+      const py = d.dragY + 6;
+      ctx.fillStyle = 'rgba(20,24,30,0.95)';
+      ctx.fillRect(px, py, 140, 28);
+      ctx.strokeStyle = '#5599FF';
+      ctx.strokeRect(px, py, 140, 28);
+      ctx.fillStyle = '#AAFFCC';
+      ctx.font = 'bold 12px Arial';
+      ctx.textAlign = 'left';
+      const label = (d.type === 'ability') ? (this.gameData.abilities.find(a => a.id === d.id)?.name || d.id) : (this.gameData.items.find(i => i.id === d.id)?.name || d.id);
+      ctx.fillText(label, px + 8, py + 18);
+      if (d.count !== undefined) {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(d.count, px + 136, py + 20);
+      }
     }
 
     ctx.textAlign = 'left';
@@ -124,6 +225,7 @@ export class InventoryUI {
 
     const SLOT = 50, GAP = 6, COLS = 4;
     let idx = 0;
+    this.hovered = null;
     for (let row = 0; row < 6; row++) {
       for (let col = 0; col < COLS; col++) {
         const sx = x + col * (SLOT + GAP);
@@ -146,9 +248,32 @@ export class InventoryUI {
           ctx.font = 'bold 11px Arial';
           ctx.textAlign = 'right';
           ctx.fillText(count, sx + SLOT - 3, sy + SLOT - 3);
+          // Hover detection for tooltip
+          if (this.mouseX >= sx && this.mouseX <= sx + SLOT && this.mouseY >= sy && this.mouseY <= sy + SLOT) {
+            this.hovered = { id, count, def, x: sx, y: sy };
+          }
           idx++;
         }
       }
+    }
+
+    // Draw tooltip if hovered
+    if (this.hovered) {
+      const h = this.hovered;
+      const name = (h.def && h.def.name) ? h.def.name : h.id;
+      const desc = (h.def && h.def.description) ? h.def.description : '';
+      const tx = Math.min(x + w - 180, this.mouseX + 12);
+      const ty = Math.max(8, this.mouseY - 28);
+      ctx.fillStyle = 'rgba(8,12,18,0.95)';
+      ctx.fillRect(tx, ty, 180, 46);
+      ctx.strokeStyle = '#334455';
+      ctx.strokeRect(tx, ty, 180, 46);
+      ctx.fillStyle = '#AAFFCC';
+      ctx.font = 'bold 11px Arial';
+      ctx.fillText(name, tx + 8, ty + 14);
+      ctx.fillStyle = '#99BBFF';
+      ctx.font = '9px Arial';
+      ctx.fillText(desc, tx + 8, ty + 30);
     }
   }
 
@@ -157,7 +282,7 @@ export class InventoryUI {
     ctx.fillStyle = '#445566';
     ctx.font = '9px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText('Click an ability to select it, then go to Hotbar tab to assign:', x, y + 10);
+    ctx.fillText('Haz clic en una habilidad para seleccionarla o arrástrala a la hotbar inferior para asignar:', x, y + 10);
     const abilities = this.gameData.abilities || [];
     const itemH = 28, padding = 4;
     // Offset content to account for hint text
@@ -210,9 +335,9 @@ export class InventoryUI {
     // Click fuera del panel — no hacer nada especial
     if (clickX < px || clickX > px + panelW || clickY < py || clickY > py + panelH) return false;
 
-    // Clicks en tabs
-    const tabs = ['items', 'abilities', 'hotbar'];
-    const tabX = [px + 30, px + 150, px + 280];
+    // Clicks en tabs (Items / Abilities)
+    const tabs = ['items', 'abilities'];
+    const tabX = [px + 30, px + 170];
     const tabW = 100, tabH = 20;
     for (let i = 0; i < tabs.length; i++) {
       if (clickX >= tabX[i] && clickX <= tabX[i] + tabW &&
@@ -240,63 +365,11 @@ export class InventoryUI {
         }
         drawY += itemH + padding;
       }
-    } else if (this.tab === 'hotbar') {
-      const slotH = 40, slotW = 60, slotGap = 8;
-      const hotbarY = contentY + 30;
-      for (let i = 0; i < 6; i++) {
-        const slotX = contentX + i * (slotW + slotGap);
-        if (clickX >= slotX && clickX <= slotX + slotW &&
-            clickY >= hotbarY && clickY <= hotbarY + slotH) {
-          this.selectedHotbarSlot = i;
-          if (this.selectedAbility) {
-            this.gameState.equipAbility(i, this.selectedAbility);
-          }
-          return true;
-        }
-      }
     }
     return true; // Consume click si estaba dentro del panel
   }
 
-  drawHotbarTab(ctx, x, y, w, h) {
-    ctx.fillStyle = '#667788';
-    ctx.font = '10px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText('1. Click ability in Abilities tab  2. Click slot here to assign:', x, y + 12);
-
-    // Draw hotbar slots
-    const slotH = 40, slotW = 60, slotGap = 8;
-    const hotbarY = y + 30;
-    for (let i = 0; i < 6; i++) {
-      const slotX = x + i * (slotW + slotGap);
-      const isSelected = this.selectedHotbarSlot === i;
-
-      ctx.fillStyle = isSelected ? 'rgba(80, 130, 255, 0.3)' : 'rgba(20, 30, 50, 0.6)';
-      ctx.strokeStyle = isSelected ? '#5599FF' : '#334455';
-      ctx.lineWidth = isSelected ? 2 : 1;
-      ctx.fillRect(slotX, hotbarY, slotW, slotH);
-      ctx.strokeRect(slotX, hotbarY, slotW, slotH);
-
-      ctx.fillStyle = '#99BBFF';
-      ctx.font = 'bold 12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText(`[${i + 1}]`, slotX + slotW / 2, hotbarY + slotH - 8);
-
-      // Show current ability
-      const slot = this.gameState.hotbar[i];
-      if (slot && slot.abilityId) {
-        ctx.fillStyle = '#AAFFCC';
-        ctx.font = '9px Arial';
-        ctx.fillText(slot.abilityId.slice(0, 8), slotX + slotW / 2, hotbarY + 18);
-      }
-    }
-
-    // Instructions
-    ctx.fillStyle = '#445566';
-    ctx.font = '9px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText('Selected: ' + (this.selectedAbility || this.selectedItem || 'nothing'), x, hotbarY + 60);
-  }
+  
 }
 
 export default InventoryUI;

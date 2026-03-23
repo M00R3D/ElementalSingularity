@@ -26,7 +26,24 @@ export class HotbarSystem {
   drawSlot(ctx, x, y, slotId, isSelected = false) {
     const slotData = this.gameState.hotbar[slotId];
     const abilityId = slotData.abilityId;
-    const ability = abilityId ? this.gameData.abilities.find(a => a.id === abilityId) : null;
+    let ability = null;
+    let itemId = null;
+    if (abilityId) {
+      if (typeof abilityId === 'string' && abilityId.startsWith('item:')) {
+        const parts = abilityId.split(':');
+        itemId = parts[1];
+        // optional count encoded as item:id:count
+        const cnt = parts[2] ? parseInt(parts[2], 10) : undefined;
+        if (!isNaN(cnt)) {
+          // attach displayCount for drawing
+          slotData.__displayCount = cnt;
+        } else {
+          slotData.__displayCount = undefined;
+        }
+      } else {
+        ability = this.gameData.abilities.find(a => a.id === abilityId);
+      }
+    }
 
     // Slot background
     ctx.fillStyle = isSelected
@@ -71,6 +88,20 @@ export class HotbarSystem {
         ctx.textAlign = 'center';
         ctx.fillText(cooldown.toFixed(1), x + this.slotSize / 2, y + this.slotSize / 2 + 5);
       }
+    }
+
+    if (itemId) {
+      // Prefer encoded count on hotbar slot, fallback to inventory count
+      const encoded = slotData.__displayCount;
+      const count = (typeof encoded === 'number') ? encoded : (this.gameState.inventory.items[itemId] || 0);
+      const itemDef = (this.gameData.items || []).find(i => i.id === itemId) || null;
+      ctx.fillStyle = itemDef ? itemDef.color : '#CCCCCC';
+      ctx.font = 'bold 11px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText((itemDef ? itemDef.name : itemId).substring(0, 8), x + this.slotSize / 2, y + 18);
+      ctx.fillStyle = '#FFD700';
+      ctx.font = '10px Arial';
+      ctx.fillText('x' + count, x + this.slotSize / 2, y + 34);
     }
 
     // Slot number (key hint)
