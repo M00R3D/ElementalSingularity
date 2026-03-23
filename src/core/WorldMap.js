@@ -256,30 +256,39 @@ export class WorldMap {
         ctx.lineWidth = 1;
         ctx.stroke();
       } else if (tree.state === 'burning') {
-        // Burning tree - red/orange canopy
+        // Burning tree - deform trunk and canopy based on burn progress and hit flash
+        const burnProgress = 1 - (tree.burnDuration / tree.maxBurnDuration);
+        const flash = tree.hitFlash || 0;
+        // soft shadow
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
         ctx.ellipse(sx + 5, sy + tree.radius * 0.6, tree.radius * 0.8, tree.radius * 0.38, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Trunk
+        // Deform using translate+scale so trunk and canopy squash/stretch
+        ctx.save();
+        ctx.translate(sx, sy);
+        const sxScale = 1 + burnProgress * 0.08 + flash * 0.03;
+        const syScale = 1 - burnProgress * 0.18 - flash * 0.06;
+        ctx.scale(sxScale, syScale);
+        // Trunk (relative coords)
         ctx.fillStyle = '#3a1a00';
-        ctx.fillRect(sx - 5, sy - 4, 10, tree.radius + 10);
-        // Burning canopy
-        const burnProgress = 1 - (tree.burnDuration / tree.maxBurnDuration);
+        ctx.fillRect(-5, -4, 10, tree.radius + 10);
+        // Burning canopy (relative coords)
         ctx.fillStyle = `rgba(${Math.floor(255 - burnProgress * 100)},${Math.floor(100 + burnProgress * 50)},0,0.9)`;
         ctx.beginPath();
-        ctx.arc(sx, sy - 10, tree.radius, 0, Math.PI * 2);
+        ctx.arc(0, -10, tree.radius, 0, Math.PI * 2);
         ctx.fill();
-        // Glow
+        ctx.restore();
+        // Glow (draw after restoring to avoid scaling glow)
         ctx.fillStyle = `rgba(255,100,0,${0.4 * (1 - burnProgress)})`;
         ctx.beginPath();
         ctx.arc(sx, sy - 10, tree.radius + 8, 0, Math.PI * 2);
         ctx.fill();
-        // Draw fire particles
+        // Draw fire particles (no transform)
         if (tree.fireParticles) {
           ctx.save();
           for (const p of tree.fireParticles) {
-            ctx.globalAlpha = p.life / p.maxLife * 0.7;
+            ctx.globalAlpha = (p.life / p.maxLife) * 0.7;
             ctx.fillStyle = p.color;
             ctx.beginPath();
             ctx.arc(sx + (p.x - tree.x), sy + (p.y - tree.y), 4 + Math.random() * 3, 0, Math.PI * 2);
@@ -294,33 +303,43 @@ export class WorldMap {
         ctx.beginPath();
         ctx.ellipse(sx + 5, sy + tree.radius * 0.6, tree.radius * 0.8, tree.radius * 0.38, 0, 0, Math.PI * 2);
         ctx.fill();
-        // Trunk
-        ctx.fillStyle = '#5a3010';
-        ctx.fillRect(sx - 5, sy - 4, 10, tree.radius + 10);
-        // Hit flash
+        // Trunk with deformation when hit
         const flash = tree.hitFlash || 0;
+        ctx.save();
+        ctx.translate(sx, sy);
+        const sxScale = 1 + flash * 0.06;
+        const syScale = 1 - flash * 0.12;
+        ctx.scale(sxScale, syScale);
+        ctx.fillStyle = '#5a3010';
+        ctx.fillRect(-5, -4, 10, tree.radius + 10);
+        ctx.restore();
+        // Hit flash highlight (draw without transform)
         if (flash > 0) {
           ctx.fillStyle = `rgba(255,230,80,${flash * 0.65})`;
           ctx.beginPath();
           ctx.arc(sx, sy - 10, tree.radius + 4, 0, Math.PI * 2);
           ctx.fill();
         }
-        // Canopy outer
+        // Canopy outer with small squash when hit
+        ctx.save();
+        ctx.translate(sx, sy - 10);
+        ctx.scale(1 + flash * 0.03, 1 - flash * 0.08);
         ctx.fillStyle = '#2a5a18';
         ctx.beginPath();
-        ctx.arc(sx, sy - 10, tree.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
         ctx.fill();
         // Canopy highlight
         ctx.fillStyle = '#3a7a25';
         ctx.beginPath();
-        ctx.arc(sx - 5, sy - 14, tree.radius * 0.65, 0, Math.PI * 2);
+        ctx.arc(-5, -4, tree.radius * 0.65, 0, Math.PI * 2);
         ctx.fill();
         // Canopy edge
         ctx.strokeStyle = '#1a3a0e';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(sx, sy - 10, tree.radius, 0, Math.PI * 2);
+        ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
         // HP bar (only when damaged)
         if (tree.hp < tree.maxHp) {
           const bw = 36, bx = sx - 18, by = sy - tree.radius - 16;
@@ -332,6 +351,7 @@ export class WorldMap {
           ctx.lineWidth = 1;
           ctx.strokeRect(bx, by, bw, 4);
         }
+        // (No face) visual deformation handled above for trunk and canopy
       }
     }
 

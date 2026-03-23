@@ -76,11 +76,16 @@ export class PlayerController {
     const sx = this.x - (camera ? camera.x : 0);
     const sy = this.y - (camera ? camera.y : 0);
 
-    // Player circle
+    // Body with slight squash/stretch deformation based on movement and cast
+    const deform = 1 + Math.sin(this.limbPhase) * 0.03 + this.castPulse * 0.12;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(1 + (Math.sin(this.limbPhase) * 0.02), 1 - (Math.abs(Math.sin(this.limbPhase)) * 0.03) + this.castPulse * 0.06);
     ctx.fillStyle = this.color;
     ctx.beginPath();
-    ctx.arc(sx, sy, this.radius, 0, Math.PI * 2);
+    ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
 
     // Cast feedback ring
     if (this.castPulse > 0) {
@@ -94,19 +99,41 @@ export class PlayerController {
       ctx.restore();
     }
 
-    // Draw simple limbs: 4 small circles (hands/feet) animated
+    // Draw limbs: larger and closer to body for a chunkier look
     const phase = this.limbPhase || 0;
     const swing = Math.sin(phase) * 4;
-    const offset = this.radius + 8;
-    // left arm (upper-left)
+    const offset = this.radius + 4; // bring limbs closer
+    const limbSize = 6; // slightly larger
     ctx.fillStyle = this.castColor || '#FFFFFF';
-    ctx.beginPath(); ctx.arc(sx - offset + swing, sy - offset - swing * 0.5, 4, 0, Math.PI * 2); ctx.fill();
-    // right arm (upper-right)
-    ctx.beginPath(); ctx.arc(sx + offset - swing, sy - offset + swing * 0.5, 4, 0, Math.PI * 2); ctx.fill();
-    // left leg (lower-left)
-    ctx.beginPath(); ctx.arc(sx - offset + swing * 0.5, sy + offset - swing, 4, 0, Math.PI * 2); ctx.fill();
-    // right leg (lower-right)
-    ctx.beginPath(); ctx.arc(sx + offset - swing * 0.5, sy + offset + swing, 4, 0, Math.PI * 2); ctx.fill();
+    // left arm
+    ctx.beginPath(); ctx.arc(sx - offset + swing, sy - offset - swing * 0.5, limbSize, 0, Math.PI * 2); ctx.fill();
+    // right arm
+    ctx.beginPath(); ctx.arc(sx + offset - swing, sy - offset + swing * 0.5, limbSize, 0, Math.PI * 2); ctx.fill();
+    // left leg
+    ctx.beginPath(); ctx.arc(sx - offset + swing * 0.5, sy + offset - swing, limbSize, 0, Math.PI * 2); ctx.fill();
+    // right leg
+    ctx.beginPath(); ctx.arc(sx + offset - swing * 0.5, sy + offset + swing, limbSize, 0, Math.PI * 2); ctx.fill();
+
+    // Face: eyes and mouth reflecting state
+    const faceY = sy - 2;
+    const eyeOffset = 6;
+    const eyeSize = 2.2;
+    // Expression: hurt if low hp, focused if casting
+    const hurt = (this.hp / this.maxHp) < 0.4;
+    ctx.fillStyle = '#000000';
+    // eyes
+    ctx.beginPath(); ctx.arc(sx - eyeOffset, faceY - 2, eyeSize, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx + eyeOffset, faceY - 2, eyeSize, 0, Math.PI * 2); ctx.fill();
+    // mouth
+    ctx.beginPath();
+    if (hurt) {
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 2; ctx.arc(sx, faceY + 4, 6, Math.PI * 0.1, Math.PI * 0.9, true);
+    } else if (this.castPulse > 0.3) {
+      ctx.fillStyle = '#000000'; ctx.fillRect(sx - 6, faceY + 2, 12, 3);
+    } else {
+      ctx.strokeStyle = '#000000'; ctx.lineWidth = 1.5; ctx.arc(sx, faceY + 2, 6, Math.PI * 0.1, Math.PI * 0.9);
+    }
+    ctx.stroke();
 
     this.drawHealthBar(ctx, sx, sy);
   }

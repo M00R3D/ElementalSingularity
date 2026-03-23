@@ -750,21 +750,76 @@ export class EntityManager {
   drawEnemy(ctx, enemy) {
     ctx.save();
     ctx.translate(enemy.x, enemy.y);
-    ctx.fillStyle = enemy.hitFlash > 0 ? '#ffffff' : enemy.color;
+
+    // Basic deformation animation (wobble while moving) and squash on hit
+    const hurt = Math.min(1, enemy.hitFlash || 0);
+    const wobble = Math.sin((enemy.aiTimer || 0) * 6) * 0.06;
+    const scaleX = 1 + wobble * 0.6 - hurt * 0.06;
+    const scaleY = 1 - wobble * 0.6 + hurt * 0.12;
+    ctx.scale(scaleX, scaleY);
+
+    // Base fill
+    ctx.fillStyle = enemy.color;
     ctx.strokeStyle = enemy.accentColor;
     ctx.lineWidth = enemy.typeId === 'boss' ? 4 : 2;
+
+    // Draw body by role
     if (enemy.role === 'tank') {
       ctx.fillRect(-enemy.radius, -enemy.radius, enemy.radius * 2, enemy.radius * 2);
+      ctx.strokeRect(-enemy.radius, -enemy.radius, enemy.radius * 2, enemy.radius * 2);
     } else if (enemy.role === 'dart' || enemy.role === 'ambush') {
-      ctx.beginPath(); ctx.moveTo(0, -enemy.radius); ctx.lineTo(enemy.radius, enemy.radius); ctx.lineTo(-enemy.radius, enemy.radius); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(0, -enemy.radius); ctx.lineTo(enemy.radius, enemy.radius); ctx.lineTo(-enemy.radius, enemy.radius); ctx.closePath(); ctx.fill(); ctx.stroke();
     } else {
-      ctx.beginPath(); ctx.arc(0, 0, enemy.radius, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, enemy.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
-    ctx.stroke();
+
+    // Draw a simple face appropriate to the typeId (animals/monsters)
+    const eyeY = -Math.max(2, enemy.radius * 0.25);
+    const eyeX = Math.max(3, enemy.radius * 0.36);
+    ctx.fillStyle = '#111';
+    ctx.strokeStyle = '#00000022';
+
+    // Specific small variants for recognizable types
+    const id = (enemy.typeId || '').toLowerCase();
+    if (id.includes('cow')) {
+      // cow: muzzle + horns
+      ctx.fillStyle = '#222';
+      ctx.fillRect(-enemy.radius * 0.5, -enemy.radius * 0.05, enemy.radius, enemy.radius * 0.45);
+      ctx.fillStyle = '#111';
+      ctx.beginPath(); ctx.arc(-eyeX * 0.6, eyeY, 2, 0, Math.PI * 2); ctx.arc(eyeX * 0.6, eyeY, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.beginPath(); ctx.moveTo(-enemy.radius * 0.7, -enemy.radius * 0.7); ctx.lineTo(-enemy.radius * 0.4, -enemy.radius * 0.45); ctx.moveTo(enemy.radius * 0.7, -enemy.radius * 0.7); ctx.lineTo(enemy.radius * 0.4, -enemy.radius * 0.45); ctx.stroke();
+    } else if (id.includes('chicken') || id.includes('bird')) {
+      // chicken: small beak
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-eyeX * 0.6, eyeY, 1.8, 0, Math.PI * 2); ctx.arc(eyeX * 0.6, eyeY, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ffcc33'; ctx.beginPath(); ctx.moveTo(0, -2); ctx.lineTo(6, 2); ctx.lineTo(-6, 2); ctx.closePath(); ctx.fill();
+    } else if (id.includes('ember') || id.includes('flame') || id.includes('fire')) {
+      // ember: glowing eyes
+      ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-eyeX * 0.6, eyeY, 2, 0, Math.PI * 2); ctx.arc(eyeX * 0.6, eyeY, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff8a2b'; ctx.beginPath(); ctx.arc(-eyeX * 0.6, eyeY, 1.2, 0, Math.PI * 2); ctx.arc(eyeX * 0.6, eyeY, 1.2, 0, Math.PI * 2); ctx.fill();
+    } else if (id.includes('shade') || id.includes('revenant') || id.includes('ghost') || id.includes('spectre')) {
+      // shadowy: hollow eyes
+      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(-eyeX * 0.6, eyeY, 3, 4, 0, 0, Math.PI * 2); ctx.ellipse(eyeX * 0.6, eyeY, 3, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#441122'; ctx.fillRect(-3, 4, 6, 2);
+    } else {
+      // default: two eyes and a neutral mouth
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(-eyeX, eyeY, 2.2, 0, Math.PI * 2); ctx.arc(eyeX, eyeY, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#221'; ctx.beginPath(); ctx.arc(0, Math.max(2, enemy.radius * 0.25), 2.2, 0, Math.PI); ctx.stroke();
+    }
+
+    // element glyph
     this.drawElementGlyph(ctx, enemy.elementId, Math.max(6, enemy.radius * 0.34));
     if (enemy.role === 'elementalist') {
       ctx.beginPath(); ctx.arc(0, 0, enemy.radius + 6, 0, Math.PI * 2); ctx.stroke();
     }
+
+    // Hurt tint overlay (red flash) using hitFlash intensity
+    if (hurt > 0) {
+      ctx.globalAlpha = Math.min(0.9, 0.45 * hurt);
+      ctx.fillStyle = '#ff6666';
+      ctx.beginPath(); ctx.arc(0, 0, enemy.radius * 1.02, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
     ctx.restore();
   }
 

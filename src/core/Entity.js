@@ -54,6 +54,8 @@ export class EntityManager {
 
       // Limb animation phase for simple hands/feet movement
       enemy.limbPhase = (enemy.limbPhase || 0) + dt * (enemy.limbSpeed || 6);
+      // Decay recent hit flash (set when takeDamage is called)
+      enemy.hitFlash = Math.max(0, (enemy.hitFlash || 0) - dt * 6);
 
       // Burn tick damage while the status is active.
       if (enemy.burnTime > 0) {
@@ -204,24 +206,174 @@ export class EntityManager {
       if (camera && !camera.isVisible(enemy.x, enemy.y, enemy.radius + 20)) continue;
       const sx = enemy.x - offX;
       const sy = enemy.y - offY;
+      // Body with subtle deformation when moving/attacking/hit
+      const moveFactor = Math.min(1, Math.hypot(enemy.vx, enemy.vy) / (enemy.speed || 60));
+      const deform = 1 + Math.sin(enemy.limbPhase || 0) * 0.03 + (enemy.attackFlash || 0) * 0.12 + (enemy.burnTime > 0 ? 0.06 : 0);
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.scale(1 + Math.sin(enemy.limbPhase || 0) * 0.02, 1 - Math.abs(Math.sin(enemy.limbPhase || 0)) * 0.03);
       ctx.fillStyle = enemy.color;
       ctx.beginPath();
-      ctx.arc(sx, sy, enemy.radius, 0, Math.PI * 2);
+      ctx.arc(0, 0, enemy.radius, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
 
-      // Draw simple limb indicators (hands and feet)
+      // Face: draw eyes/mouth depending on enemy type (animals/monsters)
+      const faceY = sy - 2;
+      const eyeXOff = Math.max(4, enemy.radius * 0.45);
+      const id = (enemy.typeId || 'goblin').toLowerCase();
+      // Simple species detection
+      let species = 'default';
+      if (id.includes('cow')) species = 'cow';
+      else if (id.includes('chicken')) species = 'chicken';
+      else if (id.includes('goblin')) species = 'goblin';
+      else if (id.includes('orc')) species = 'orc';
+      else if (id.includes('skeleton')) species = 'skeleton';
+      else if (id.includes('shade')) species = 'shade';
+
+      // Species-specific limbs (patas/extremidades)
       const phase = enemy.limbPhase || 0;
-      const armOffsetY = Math.sin(phase) * 2;
-      ctx.fillStyle = 'rgba(255,255,255,0.18)';
-      ctx.beginPath();
-      ctx.arc(sx - enemy.radius - 6, sy + armOffsetY, 4, 0, Math.PI * 2);
-      ctx.arc(sx + enemy.radius + 6, sy - armOffsetY, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.beginPath();
-      ctx.arc(sx - 5, sy + enemy.radius + 5 + Math.abs(Math.sin(phase)) * 1.5, 3.5, 0, Math.PI * 2);
-      ctx.arc(sx + 5, sy + enemy.radius + 5 - Math.abs(Math.sin(phase)) * 1.5, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+      const swing = Math.sin(phase) * 3;
+      
+      if (species === 'cow') {
+        // Cow: 4 legs in quadruped style (2 front, 2 back) - marrón
+        ctx.fillStyle = '#8B6914'; // brown
+        const legSize = 4;
+        // Front legs
+        ctx.beginPath(); ctx.arc(sx - 8, sy + enemy.radius + 6 + Math.abs(Math.sin(phase)) * 1.5, legSize, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + 8, sy + enemy.radius + 6 - Math.abs(Math.sin(phase)) * 1.5, legSize, 0, Math.PI * 2); ctx.fill();
+        // Back legs
+        ctx.beginPath(); ctx.arc(sx - 6, sy + enemy.radius + 8 + Math.abs(Math.sin(phase + Math.PI)) * 1.5, legSize, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + 6, sy + enemy.radius + 8 - Math.abs(Math.sin(phase + Math.PI)) * 1.5, legSize, 0, Math.PI * 2); ctx.fill();
+      } else if (species === 'chicken') {
+        // Chicken: 2 orange legs
+        ctx.fillStyle = '#FFA500'; // orange
+        const legSize = 3;
+        ctx.beginPath(); ctx.arc(sx - 3, sy + enemy.radius + 7, legSize, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + 3, sy + enemy.radius + 7, legSize, 0, Math.PI * 2); ctx.fill();
+      } else {
+        // Default/Goblin/Orc/Skeleton: 4 generic limbs (arms + feet)
+        const armOffset = enemy.radius + 4;
+        const limbSize = 5;
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        ctx.beginPath(); ctx.arc(sx - armOffset + swing, sy - 2 + swing * 0.2, limbSize, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + armOffset - swing, sy - 2 - swing * 0.2, limbSize, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.beginPath(); ctx.arc(sx - 4, sy + enemy.radius + 4 + Math.abs(Math.sin(phase)) * 1.2, limbSize - 1, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + 4, sy + enemy.radius + 4 - Math.abs(Math.sin(phase)) * 1.2, limbSize - 1, 0, Math.PI * 2); ctx.fill();
+      }
+      const isPassive = !!enemy.passive;
+      const isBurning = enemy.burnTime > 0;
+      const isAttacking = enemy.attackFlash > 0.2;
+
+      // Choose eye/mouth color with enough contrast against body color
+      const parseHex = (h) => {
+        if (!h || h[0] !== '#') return { r: 34, g: 34, b: 34 };
+        const v = h.slice(1);
+        const hex = v.length === 3 ? v.split('').map(c => c + c).join('') : v;
+        return { r: parseInt(hex.slice(0,2),16), g: parseInt(hex.slice(2,4),16), b: parseInt(hex.slice(4,6),16) };
+      };
+      const bodyRgb = parseHex(enemy.color || '#222222');
+      const luminance = (0.2126 * bodyRgb.r + 0.7152 * bodyRgb.g + 0.0722 * bodyRgb.b) / 255;
+      const eyeColor = luminance > 0.5 ? '#0a0a0a' : '#ffffff';
+      // Eyes
+      ctx.fillStyle = eyeColor;
+      if (isAttacking) {
+        ctx.fillRect(sx - eyeXOff - 2, faceY - 3, 4, 3);
+        ctx.fillRect(sx + eyeXOff - 2, faceY - 3, 4, 3);
+      } else {
+        // type-specific eye styles
+        if (species === 'cow') {
+          ctx.beginPath(); ctx.arc(sx - eyeXOff * 0.6, faceY - 3, 2.2, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx + eyeXOff * 0.6, faceY - 3, 2.2, 0, Math.PI * 2); ctx.fill();
+        } else if (species === 'chicken' || species === 'bird') {
+          ctx.beginPath(); ctx.arc(sx - eyeXOff * 0.6, faceY - 3, 1.6, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx + eyeXOff * 0.6, faceY - 3, 1.6, 0, Math.PI * 2); ctx.fill();
+        } else if (species === 'goblin' || species === 'orc') {
+          // sly eyes
+          ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(sx - eyeXOff, faceY - 3, 3, 2.2, -0.25, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(sx + eyeXOff, faceY - 3, 3, 2.2, 0.25, 0, Math.PI * 2); ctx.fill();
+        } else if (species === 'skeleton' || species === 'shade' || species === 'revenant' || species === 'ghost') {
+          ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(sx - eyeXOff, faceY - 3, 3.4, 4.0, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(sx + eyeXOff, faceY - 3, 3.4, 4.0, 0, 0, Math.PI * 2); ctx.fill();
+        } else {
+          ctx.beginPath(); ctx.arc(sx - eyeXOff, faceY - 3, 2, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx + eyeXOff, faceY - 3, 2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+
+      // Mouth / expression (species-specific snouts)
+      ctx.strokeStyle = eyeColor; ctx.lineWidth = 1;
+      if (species === 'cow') {
+        // Cow: visible snout patch with nostrils (always shown, even if passive)
+        ctx.fillStyle = '#d3b77b';
+        ctx.beginPath();
+        ctx.ellipse(sx, faceY + 4.5, 6.5, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#6f5430';
+        ctx.beginPath(); ctx.arc(sx - 2.2, faceY + 4.5, 0.9, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(sx + 2.2, faceY + 4.5, 0.9, 0, Math.PI * 2); ctx.fill();
+      } else if (species === 'chicken') {
+        // Chicken: small orange beak (always shown, even if passive)
+        ctx.beginPath();
+        ctx.moveTo(sx - 2.8, faceY + 2.8);
+        ctx.lineTo(sx + 2.8, faceY + 2.8);
+        ctx.lineTo(sx, faceY + 5.8);
+        ctx.closePath();
+        ctx.fillStyle = '#ff9800';
+        ctx.fill();
+      } else if (isBurning) {
+        // Distressed expression: inverted arc
+        ctx.beginPath(); ctx.lineWidth = 2; ctx.arc(sx, faceY + 6, 6, Math.PI * 0.05, Math.PI * 0.95, true); ctx.stroke();
+      } else if (isAttacking) {
+        // Angry serious mouth
+        ctx.fillStyle = eyeColor;
+        ctx.fillRect(sx - 5, faceY + 2, 10, 3);
+      } else if (isPassive) {
+        // Gentle smile when not in danger (for passive non-animal defaults)
+        ctx.beginPath(); ctx.arc(sx, faceY + 4, 5, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+      } else if (species === 'goblin' || species === 'orc') {
+        // Goblin/Orc: large mouth with grin + teeth
+        ctx.beginPath();
+        ctx.moveTo(sx - 5, faceY + 4);
+        ctx.lineTo(sx + 5, faceY + 4);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Small teeth marks
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(sx - 3, faceY + 4, 1, 2);
+        ctx.fillRect(sx - 0.5, faceY + 4, 1, 2);
+        ctx.fillRect(sx + 2, faceY + 4, 1, 2);
+      } else if (species === 'skeleton') {
+        // Skeleton: rictus grin (wide jawline)
+        ctx.beginPath();
+        ctx.moveTo(sx - 7, faceY + 5);
+        ctx.lineTo(sx + 7, faceY + 5);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Teeth marks along jaw
+        for (let i = -6; i <= 6; i += 2) {
+          ctx.beginPath();
+          ctx.moveTo(sx + i, faceY + 5);
+          ctx.lineTo(sx + i, faceY + 7);
+          ctx.stroke();
+        }
+      } else {
+        // Default: generic smile
+        ctx.beginPath();
+        ctx.arc(sx, faceY + 3, 5, Math.PI * 0.15, Math.PI * 0.85);
+        ctx.stroke();
+      }
+
+      // Hurt tint overlay (red flash) based on hitFlash
+      const hurt = Math.min(1, enemy.hitFlash || 0);
+      if (hurt > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.9, 0.35 * hurt);
+        ctx.fillStyle = '#ff6666';
+        ctx.beginPath(); ctx.arc(sx, sy, enemy.radius * 1.02, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
 
       if (enemy.burnTime > 0) {
         ctx.strokeStyle = enemy.burnColor || '#FF4500';
@@ -241,6 +393,12 @@ export class EntityManager {
         ctx.stroke();
         ctx.restore();
       }
+
+      // DEBUG: Show typeId & species above mob
+      ctx.fillStyle = '#FFFF00';
+      ctx.font = 'bold 10px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${enemy.typeId}`, sx, sy - enemy.radius - 16);
 
       // HP bar
       const barW = 20;
@@ -296,6 +454,7 @@ export class EntityManager {
       hp,
       limbPhase: Math.random() * Math.PI * 2,
       limbSpeed: 4 + Math.random() * 6,
+      hitFlash: 0,
       // passive flag for animals
       passive: (typeId === 'cow' || typeId === 'chicken'),
       wanderPhase: Math.random() * Math.PI * 2,
@@ -319,6 +478,7 @@ export class EntityManager {
       typeId,
       takeDamage(amount) {
         this.hp -= amount;
+        this.hitFlash = 1; // trigger red tint briefly
         if (this.hp <= 0) {
           this.hp   = 0;
           this.dead = true;
