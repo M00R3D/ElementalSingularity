@@ -43,7 +43,23 @@ export class WorldMap {
       }
       if (overlap) continue;
 
-      this.trees.push({ x, y, hp: 3, maxHp: 3, radius: 22, state: 'alive', hitFlash: 0, leaflessTime: 0 });
+      this.trees.push({
+        x,
+        y,
+        homeX: x,
+        homeY: y,
+        hp: 3,
+        maxHp: 3,
+        radius: 22,
+        state: 'alive',
+        hitFlash: 0,
+        leaflessTime: 0,
+        wetTime: 0,
+        swayTime: 0,
+        swayPower: 0,
+        swayPhase: Math.random() * Math.PI * 2,
+        smokeParticles: []
+      });
     }
 
     // Rocks
@@ -71,6 +87,13 @@ export class WorldMap {
     for (const tree of this.trees) {
       if (tree.hitFlash > 0) tree.hitFlash -= dt * 5;
       tree.leaflessTime = Math.max(0, (tree.leaflessTime || 0) - dt);
+      tree.wetTime = Math.max(0, (tree.wetTime || 0) - dt);
+      tree.swayTime = Math.max(0, (tree.swayTime || 0) - dt);
+      tree.swayPower = Math.max(0, (tree.swayPower || 0) - dt * 0.9);
+      tree.swayPhase = (tree.swayPhase || 0) + dt * (6 + (tree.swayPower || 0) * 2.5);
+      tree.x += ((tree.homeX ?? tree.x) - tree.x) * Math.min(1, dt * 4);
+      tree.y += ((tree.homeY ?? tree.y) - tree.y) * Math.min(1, dt * 4);
+
       if (tree.fireParticles) {
         for (let i = tree.fireParticles.length - 1; i >= 0; i--) {
           const p = tree.fireParticles[i];
@@ -79,6 +102,16 @@ export class WorldMap {
           p.vy -= 80 * dt; // Gravity
           p.life -= dt;
           if (p.life <= 0) tree.fireParticles.splice(i, 1);
+        }
+      }
+      if (tree.smokeParticles) {
+        for (let i = tree.smokeParticles.length - 1; i >= 0; i--) {
+          const p = tree.smokeParticles[i];
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vx *= 0.96;
+          p.life -= dt;
+          if (p.life <= 0) tree.smokeParticles.splice(i, 1);
         }
       }
     }
@@ -109,24 +142,64 @@ export class WorldMap {
     });
   }
 
+  _emitTreeSmoke(tree, count = 10) {
+    if (!tree) return;
+    tree.smokeParticles = tree.smokeParticles || [];
+    for (let i = 0; i < count; i++) {
+      tree.smokeParticles.push({
+        x: tree.x + (Math.random() - 0.5) * 20,
+        y: tree.y - 8 + (Math.random() - 0.5) * 12,
+        vx: (Math.random() - 0.5) * 22,
+        vy: -18 - Math.random() * 38,
+        life: 0.35 + Math.random() * 0.45,
+        maxLife: 0.8,
+        size: 2 + Math.random() * 3,
+        color: Math.random() < 0.55 ? '#9aa3ad' : '#c4c9cf'
+      });
+    }
+  }
+
   extinguishTreesInRadius(x, y, radius = 34) {
     let count = 0;
     for (const tree of this.trees) {
-      if (tree.state !== 'burning') continue;
       if (Math.hypot(tree.x - x, tree.y - y) > radius + (tree.radius || 0) * 0.6) continue;
-      tree.state = 'alive';
-      tree.burnDuration = 0;
-      tree.fireParticles = [];
-      tree.color = null;
-      tree.hp = Math.max(1, tree.hp || tree.maxHp || 3);
-      count++;
+      if (tree.state === 'burning') {
+        tree.state = 'alive';
+        tree.burnDuration = 0;
+        tree.fireParticles = [];
+        tree.color = null;
+        tree.hp = Math.max(1, tree.hp || tree.maxHp || 3);
+        this._emitTreeSmoke(tree, 12);
+        count++;
+      }
+      tree.wetTime = Math.max(tree.wetTime || 0, 4.8);
     }
     return count;
+  }
+
+  soakTreesInRadius(x, y, radius = 40, wetDuration = 4.8) {
+    let soaked = 0;
+    for (const tree of this.trees) {
+      if (tree.state === 'stump' || tree.state === 'burnt') continue;
+      if (Math.hypot(tree.x - x, tree.y - y) > radius + (tree.radius || 0) * 0.7) continue;
+      tree.wetTime = Math.max(tree.wetTime || 0, wetDuration);
+      if (tree.state === 'burning') {
+        tree.state = 'alive';
+        tree.burnDuration = 0;
+        tree.fireParticles = [];
+        tree.color = null;
+        tree.hp = Math.max(1, tree.hp || tree.maxHp || 3);
+        this._emitTreeSmoke(tree, 13);
+      }
+      soaked++;
+    }
+    return soaked;
   }
 
   applyPuddleEffects(player, enemies = [], dt = 0.016) {
     if (!player) return;
     for (const puddle of this.puddles) {
+      this.soakTreesInRadius(puddle.x, puddle.y, puddle.radius * 0.92, 5.2);
       this.extinguishTreesInRadius(puddle.x, puddle.y, puddle.radius * 0.85);
 
       const toPX = player.x - puddle.x;
@@ -147,6 +220,7 @@ export class WorldMap {
           if ((enemy.burnTime || 0) > 0) {
             enemy.burnTime = 0;
             enemy.burnTick = 0;
+            enemy.extinguishSmokeTime = Math.max(enemy.extinguishSmokeTime || 0, 0.35);
           }
           if (typeof enemy.applySlippery === 'function') {
             enemy.applySlippery(puddle.slipDuration, toEX, toEY, 95, puddle.friction);
@@ -165,6 +239,25 @@ export class WorldMap {
       count++;
     }
     return count;
+  }
+
+  joltTreesAt(x, y, radius = 120, intensity = 1.0, maxDisplace = 8, swayDuration = 0.65) {
+    let moved = 0;
+    for (const tree of this.trees) {
+      if (tree.state === 'stump' || tree.state === 'burnt') continue;
+      const d = Math.hypot(tree.x - x, tree.y - y);
+      if (d > radius + (tree.radius || 0) * 0.65) continue;
+      const scale = Math.max(0.2, 1 - d / Math.max(1, radius));
+      const dirX = (tree.x - x) / Math.max(1, d);
+      const dirY = (tree.y - y) / Math.max(1, d);
+      const push = maxDisplace * scale * intensity;
+      tree.x += dirX * push;
+      tree.y += dirY * push * 0.75;
+      tree.swayTime = Math.max(tree.swayTime || 0, swayDuration * (0.7 + scale * 0.6));
+      tree.swayPower = Math.max(tree.swayPower || 0, 0.35 + scale * 1.15 * intensity);
+      moved++;
+    }
+    return moved;
   }
 
   // ── Drops ────────────────────────────────────────────────────────────────
@@ -344,13 +437,17 @@ export class WorldMap {
       if (!camera.isVisible(tree.x, tree.y, tree.radius + 10)) continue;
       const sx = tree.x - camera.x;
       const sy = tree.y - camera.y;
+      const swayAmt = (tree.swayTime || 0) > 0 ? Math.sin(tree.swayPhase || 0) * (tree.swayPower || 0) * 3.4 : 0;
+      const wetFactor = Math.max(0, Math.min(1, (tree.wetTime || 0) / 4.8));
+      const trunkShiftX = swayAmt * 0.35;
+      const canopyShiftX = swayAmt;
 
       if (tree.state === 'stump' || tree.state === 'burnt') {
         // Stump or burnt tree
         const color = tree.state === 'burnt' ? '#1a1a1a' : '#5a3010';
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.ellipse(sx, sy, 9, 6, 0, 0, Math.PI * 2);
+        ctx.ellipse(sx + trunkShiftX, sy, 9, 6, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = tree.state === 'burnt' ? '#0a0a0a' : '#7a4520';
         ctx.lineWidth = 1;
@@ -366,7 +463,7 @@ export class WorldMap {
         ctx.fill();
         // Deform using translate+scale so trunk and canopy squash/stretch
         ctx.save();
-        ctx.translate(sx, sy);
+        ctx.translate(sx + trunkShiftX, sy);
         const sxScale = 1 + burnProgress * 0.08 + flash * 0.03;
         const syScale = 1 - burnProgress * 0.18 - flash * 0.06;
         ctx.scale(sxScale, syScale);
@@ -376,13 +473,13 @@ export class WorldMap {
         // Burning canopy (relative coords)
         ctx.fillStyle = `rgba(${Math.floor(255 - burnProgress * 100)},${Math.floor(100 + burnProgress * 50)},0,0.9)`;
         ctx.beginPath();
-        ctx.arc(0, -10, tree.radius, 0, Math.PI * 2);
+        ctx.arc(canopyShiftX * 0.25, -10, tree.radius, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         // Glow (draw after restoring to avoid scaling glow)
         ctx.fillStyle = `rgba(255,100,0,${0.4 * (1 - burnProgress)})`;
         ctx.beginPath();
-        ctx.arc(sx, sy - 10, tree.radius + 8, 0, Math.PI * 2);
+        ctx.arc(sx + canopyShiftX * 0.35, sy - 10, tree.radius + 8, 0, Math.PI * 2);
         ctx.fill();
         // Draw fire particles (no transform)
         if (tree.fireParticles) {
@@ -391,7 +488,18 @@ export class WorldMap {
             ctx.globalAlpha = (p.life / p.maxLife) * 0.7;
             ctx.fillStyle = p.color;
             ctx.beginPath();
-            ctx.arc(sx + (p.x - tree.x), sy + (p.y - tree.y), 4 + Math.random() * 3, 0, Math.PI * 2);
+            ctx.arc(sx + trunkShiftX + (p.x - tree.x), sy + (p.y - tree.y), 4 + Math.random() * 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+        if (tree.smokeParticles && tree.smokeParticles.length > 0) {
+          ctx.save();
+          for (const p of tree.smokeParticles) {
+            ctx.globalAlpha = (p.life / p.maxLife) * 0.65;
+            ctx.fillStyle = p.color || '#aab2bb';
+            ctx.beginPath();
+            ctx.arc(sx + trunkShiftX + (p.x - tree.x), sy + (p.y - tree.y), p.size || 2.6, 0, Math.PI * 2);
             ctx.fill();
           }
           ctx.restore();
@@ -401,12 +509,12 @@ export class WorldMap {
         // Shadow
         ctx.fillStyle = 'rgba(0,0,0,0.2)';
         ctx.beginPath();
-        ctx.ellipse(sx + 5, sy + tree.radius * 0.6, tree.radius * 0.8, tree.radius * 0.38, 0, 0, Math.PI * 2);
+        ctx.ellipse(sx + 5 + trunkShiftX * 0.4, sy + tree.radius * 0.6, tree.radius * 0.8, tree.radius * 0.38, 0, 0, Math.PI * 2);
         ctx.fill();
         // Trunk with deformation when hit
         const flash = tree.hitFlash || 0;
         ctx.save();
-        ctx.translate(sx, sy);
+        ctx.translate(sx + trunkShiftX, sy);
         const sxScale = 1 + flash * 0.06;
         const syScale = 1 - flash * 0.12;
         ctx.scale(sxScale, syScale);
@@ -417,7 +525,7 @@ export class WorldMap {
         if (flash > 0) {
           ctx.fillStyle = `rgba(255,230,80,${flash * 0.65})`;
           ctx.beginPath();
-          ctx.arc(sx, sy - 10, tree.radius + 4, 0, Math.PI * 2);
+          ctx.arc(sx + canopyShiftX * 0.3, sy - 10, tree.radius + 4, 0, Math.PI * 2);
           ctx.fill();
         }
         if ((tree.leaflessTime || 0) > 0) {
@@ -425,27 +533,33 @@ export class WorldMap {
           ctx.strokeStyle = barkTone;
           ctx.lineWidth = 3;
           ctx.beginPath();
-          ctx.moveTo(sx, sy - 6);
-          ctx.lineTo(sx - 9, sy - 20);
-          ctx.moveTo(sx, sy - 8);
-          ctx.lineTo(sx + 8, sy - 18);
-          ctx.moveTo(sx, sy - 13);
-          ctx.lineTo(sx - 4, sy - 25);
+          ctx.moveTo(sx + trunkShiftX, sy - 6);
+          ctx.lineTo(sx + trunkShiftX - 9 + canopyShiftX * 0.28, sy - 20);
+          ctx.moveTo(sx + trunkShiftX, sy - 8);
+          ctx.lineTo(sx + trunkShiftX + 8 + canopyShiftX * 0.24, sy - 18);
+          ctx.moveTo(sx + trunkShiftX, sy - 13);
+          ctx.lineTo(sx + trunkShiftX - 4 + canopyShiftX * 0.18, sy - 25);
           ctx.stroke();
         } else {
           // Canopy outer with small squash when hit
           ctx.save();
-          ctx.translate(sx, sy - 10);
-          ctx.scale(1 + flash * 0.03, 1 - flash * 0.08);
-          ctx.fillStyle = '#2a5a18';
+          ctx.translate(sx + canopyShiftX, sy - 10);
+          ctx.scale(1 + flash * 0.03 + wetFactor * 0.02, 1 - flash * 0.08);
+          ctx.fillStyle = wetFactor > 0 ? '#24501b' : '#2a5a18';
           ctx.beginPath();
           ctx.arc(0, 0, tree.radius, 0, Math.PI * 2);
           ctx.fill();
           // Canopy highlight
-          ctx.fillStyle = '#3a7a25';
+          ctx.fillStyle = wetFactor > 0 ? '#3f8b37' : '#3a7a25';
           ctx.beginPath();
           ctx.arc(-5, -4, tree.radius * 0.65, 0, Math.PI * 2);
           ctx.fill();
+          if (wetFactor > 0) {
+            ctx.fillStyle = `rgba(145, 205, 255, ${0.22 * wetFactor})`;
+            ctx.beginPath();
+            ctx.arc(-2, -7, tree.radius * 0.55, 0, Math.PI * 2);
+            ctx.fill();
+          }
           // Canopy edge
           ctx.strokeStyle = '#1a3a0e';
           ctx.lineWidth = 2;
@@ -466,6 +580,18 @@ export class WorldMap {
           ctx.strokeRect(bx, by, bw, 4);
         }
         // (No face) visual deformation handled above for trunk and canopy
+      }
+
+      if (tree.smokeParticles && tree.smokeParticles.length > 0 && tree.state !== 'burning') {
+        ctx.save();
+        for (const p of tree.smokeParticles) {
+          ctx.globalAlpha = (p.life / p.maxLife) * 0.62;
+          ctx.fillStyle = p.color || '#b4bac2';
+          ctx.beginPath();
+          ctx.arc(sx + trunkShiftX + (p.x - tree.x), sy + (p.y - tree.y), p.size || 2.6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
       }
     }
 

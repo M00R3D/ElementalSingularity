@@ -182,6 +182,22 @@ export class EntityManager {
           color: Math.random() > 0.45 ? '#FF4500' : '#FF8C00'
         });
       }
+
+      if ((enemy.extinguishSmokeTime || 0) > 0) {
+        enemy.extinguishSmokeTime = Math.max(0, (enemy.extinguishSmokeTime || 0) - dt);
+        if (Math.random() < 0.75) {
+          this.particles.push({
+            x: enemy.x + (Math.random() - 0.5) * enemy.radius * 1.6,
+            y: enemy.y - enemy.radius * 0.2 + (Math.random() - 0.5) * enemy.radius,
+            vx: (Math.random() - 0.5) * 20,
+            vy: -22 - Math.random() * 28,
+            life: 0.22 + Math.random() * 0.25,
+            maxLife: 0.55,
+            size: 1.8 + Math.random() * 2.6,
+            color: Math.random() < 0.55 ? '#a6afb8' : '#c2c8cf'
+          });
+        }
+      }
     }
 
     // Auto-spawn entities around the player at intervals.
@@ -539,6 +555,7 @@ export class EntityManager {
       burnTick:  0,
       burnDamage: 3,
       burnColor: '#FF4500',
+      extinguishSmokeTime: 0,
       attackCooldown:    0,
       attackCooldownMax: 1.5,
       attackRange: radius + 16,

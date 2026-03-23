@@ -251,6 +251,14 @@ export class CombatEngine {
 
       // Water bolts can extinguish burning trees and create puddles.
       if (!hit && worldMap && projectile.ability.waterPuddleDuration) {
+        if (typeof worldMap.soakTreesInRadius === 'function') {
+          worldMap.soakTreesInRadius(
+            projectile.x,
+            projectile.y,
+            (projectile.ability.extinguishRadius || 34) * 1.05,
+            5.1
+          );
+        }
         const extinguished = worldMap.extinguishTreesInRadius(
           projectile.x,
           projectile.y,
@@ -274,8 +282,12 @@ export class CombatEngine {
                 projectile.ability.projectileColor || '#FF4500');
             }
             if (projectile.ability.waterPuddleDuration) {
+              const wasBurning = (enemy.burnTime || 0) > 0;
               enemy.burnTime = 0;
               enemy.burnTick = 0;
+              if (wasBurning) {
+                this.spawnSmokeBurst(enemy.x, enemy.y - (enemy.z || 0) * 0.3, 11);
+              }
               if (typeof enemy.applySlippery === 'function') {
                 enemy.applySlippery(
                   projectile.ability.slipperyDuration || 1.8,
@@ -301,6 +313,14 @@ export class CombatEngine {
 
       if (hit || projectile.life <= 0) {
         if (worldMap && projectile.ability.waterPuddleDuration) {
+          if (typeof worldMap.soakTreesInRadius === 'function') {
+            worldMap.soakTreesInRadius(
+              projectile.x,
+              projectile.y,
+              (projectile.ability.waterPuddleRadius || 30) * 1.12,
+              5.4
+            );
+          }
           worldMap.spawnWaterPuddle(
             projectile.x,
             projectile.y,
@@ -351,6 +371,21 @@ export class CombatEngine {
       return;
     }
     target.stunTime = Math.max(target.stunTime || 0, durationSeconds);
+  }
+
+  spawnSmokeBurst(x, y, count = 10) {
+    for (let i = 0; i < count; i++) {
+      this.particles.push({
+        x: x + (Math.random() - 0.5) * 16,
+        y: y + (Math.random() - 0.5) * 12,
+        vx: (Math.random() - 0.5) * 26,
+        vy: -15 - Math.random() * 38,
+        life: 0.28 + Math.random() * 0.35,
+        maxLife: 0.75,
+        size: 2 + Math.random() * 2.8,
+        color: Math.random() < 0.5 ? '#9ca5af' : '#c4cad1'
+      });
+    }
   }
 
   castChainLightning(fromPlayer, toTarget, ability) {
@@ -557,6 +592,11 @@ export class CombatEngine {
         size: 2.5,
         color: '#8B6355'
       });
+    }
+
+    const worldMap = this._worldContext || null;
+    if (worldMap && typeof worldMap.joltTreesAt === 'function') {
+      worldMap.joltTreesAt(cX, cY, Math.max(radius * 1.08, 120), 1.0, 8, 0.72);
     }
 
     return true;
