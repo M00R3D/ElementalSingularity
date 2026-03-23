@@ -4,6 +4,8 @@
 // With tabs for Items, Abilities, and Hotbar
 // ========================================
 
+import { drawGraphicLayers } from './GraphicRenderer.js';
+
 export class InventoryUI {
   constructor(gameData, gameState, player) {
     this.gameData   = gameData;
@@ -22,6 +24,11 @@ export class InventoryUI {
   }
 
   toggle() { this.isOpen = !this.isOpen; }
+
+  canShowAbility(ab) {
+    if (!ab || !ab.element) return true;
+    return this.gameState.gameMode === 'creative' || this.gameState.hasElementUnlocked(ab.element);
+  }
 
   handleKeyInput(key) {
     if (!this.isOpen) return;
@@ -46,7 +53,7 @@ export class InventoryUI {
       const itemH = 28, padding = 4;
       let drawY = (contentY + 16) - this.scrollPos; // matches draw offset
       for (const ab of abilities) {
-        if (ab.element && !this.gameState.hasElementUnlocked(ab.element)) continue;
+        if (!this.canShowAbility(ab)) continue;
         if (clickY >= drawY && clickY <= drawY + itemH && clickX >= contentX && clickX <= contentX + (panelW - 24)) {
           this.dragging = { type: 'ability', id: ab.id, dragX: clickX, dragY: clickY };
           this.selectedAbility = ab.id;
@@ -243,8 +250,14 @@ export class InventoryUI {
         if (idx < items.length) {
           const [id, count] = items[idx];
           const def = itemMap[id];
-          ctx.fillStyle = def ? def.color : '#AAAAAA';
+          ctx.fillStyle = '#121927';
           ctx.fillRect(sx + 4, sy + 4, SLOT - 8, SLOT - 16);
+          if (def && def.graphic) {
+            drawGraphicLayers(ctx, def.graphic, sx + SLOT / 2, sy + 18, SLOT * 0.62);
+          } else {
+            ctx.fillStyle = def ? def.color : '#AAAAAA';
+            ctx.fillRect(sx + 8, sy + 8, SLOT - 16, SLOT - 24);
+          }
           ctx.fillStyle = '#FFD700';
           ctx.font = 'bold 11px Arial';
           ctx.textAlign = 'right';
@@ -308,18 +321,19 @@ export class InventoryUI {
       if (drawY > y + h) break;
 
       const isSelected = this.selectedAbility === ab.id;
+      const isLocked = !this.canShowAbility(ab);
       ctx.fillStyle = isSelected ? 'rgba(80, 130, 255, 0.2)' : 'rgba(20, 30, 50, 0.6)';
       ctx.strokeStyle = isSelected ? '#5599FF' : '#334455';
       ctx.lineWidth = isSelected ? 2 : 1;
       ctx.fillRect(x + 2, drawY, w - 4, itemH);
       ctx.strokeRect(x + 2, drawY, w - 4, itemH);
 
-      ctx.fillStyle = isSelected ? '#AAFFCC' : '#99BBFF';
+      ctx.fillStyle = isLocked ? '#667788' : (isSelected ? '#AAFFCC' : '#99BBFF');
       ctx.font = 'bold 11px Arial';
       ctx.textAlign = 'left';
       ctx.fillText(ab.name, x + 10, drawY + 17);
 
-      ctx.fillStyle = '#667788';
+      ctx.fillStyle = isLocked ? '#556270' : '#667788';
       ctx.font = '8px Arial';
       ctx.fillText(`Damage: ${ab.baseDamage} | Cooldown: ${ab.cooldown}s`, x + 10, drawY + 24);
 
@@ -364,7 +378,7 @@ export class InventoryUI {
       let drawY = (contentY + 16) - this.scrollPos;
       for (const ab of abilities) {
         // Skip locked-element abilities
-        if (ab.element && !this.gameState.hasElementUnlocked(ab.element)) continue;
+        if (!this.canShowAbility(ab)) continue;
         if (clickY >= drawY && clickY <= drawY + itemH &&
             clickX >= contentX && clickX <= contentX + contentW) {
           this.selectedAbility = ab.id;

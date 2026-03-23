@@ -3,6 +3,8 @@
 // Handles: hotbar UI, ability selection, execution
 // ========================================
 
+import { drawGraphicLayers } from './GraphicRenderer.js';
+
 export class HotbarSystem {
   constructor(gameData, gameState) {
     this.gameData = gameData;
@@ -95,10 +97,16 @@ export class HotbarSystem {
       const encoded = slotData.__displayCount;
       const count = (typeof encoded === 'number') ? encoded : (this.gameState.inventory.items[itemId] || 0);
       const itemDef = (this.gameData.items || []).find(i => i.id === itemId) || null;
-      ctx.fillStyle = itemDef ? itemDef.color : '#CCCCCC';
-      ctx.font = 'bold 11px Arial';
+      if (itemDef && itemDef.graphic) {
+        drawGraphicLayers(ctx, itemDef.graphic, x + this.slotSize / 2, y + 18, this.slotSize * 0.5);
+      } else {
+        ctx.fillStyle = itemDef ? itemDef.color : '#CCCCCC';
+        ctx.fillRect(x + 12, y + 8, this.slotSize - 24, this.slotSize - 28);
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 9px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText((itemDef ? itemDef.name : itemId).substring(0, 8), x + this.slotSize / 2, y + 18);
+      ctx.fillText((itemDef ? itemDef.name : itemId).substring(0, 8), x + this.slotSize / 2, y + 14);
       ctx.fillStyle = '#FFD700';
       ctx.font = '10px Arial';
       ctx.fillText('x' + count, x + this.slotSize / 2, y + 34);

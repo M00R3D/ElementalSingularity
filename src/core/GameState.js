@@ -73,12 +73,14 @@ export class GameStateManager {
 
   hasElementUnlocked(elementId) {
     if (!elementId) return true;
+    if (this.gameMode === 'creative') return true;
     return this.unlockedElements.includes(elementId);
   }
 
   canUseAbility(gameData, abilityId) {
     if (!abilityId || typeof abilityId !== 'string') return false;
     if (abilityId.startsWith('item:')) return true;
+    if (this.gameMode === 'creative') return true;
     const ability = (gameData.abilities || []).find(a => a.id === abilityId);
     if (!ability) return false;
     return this.hasElementUnlocked(ability.element);

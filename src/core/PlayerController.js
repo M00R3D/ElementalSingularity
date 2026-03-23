@@ -4,6 +4,7 @@
 // ========================================
 
 import { buildHitboxProfile, PLAYER_HITBOX_TEMPLATE } from './PhysicsConfig.js';
+import { drawGraphicLayers } from './GraphicRenderer.js';
 
 export class PlayerController {
   constructor(x = 1200, y = 900, worldWidth = 2400, worldHeight = 1800) {
@@ -62,6 +63,15 @@ export class PlayerController {
     this.jumpGravity = 980;
     this.jumpStrength = 460;
     this.isJumping = false;
+    this.actionTime = 0;
+    this.heldItemGraphic = null;
+    this.heldItemColor = '#FFFFFF';
+    this.levelUpDisplayTime = 0;
+    this.levelUpText = '';
+    this.levelUpParticles = [];
+    this.orbUnlockTime = 0;
+    this.orbUnlockColor = '#FFFFFF';
+    this.orbUnlockParticles = [];
 
     this.updateHitboxDefinitions();
   }
@@ -146,9 +156,92 @@ export class PlayerController {
 
     // Decay cast pulse effect.
     this.castPulse = Math.max(0, this.castPulse - dt * 2.8);
+    this.actionTime = Math.max(0, this.actionTime - dt * 2.6);
+    this.levelUpDisplayTime = Math.max(0, this.levelUpDisplayTime - dt);
+    this.orbUnlockTime = Math.max(0, this.orbUnlockTime - dt);
+
+    this.levelUpParticles = this.levelUpParticles.filter((particle) => {
+      particle.life -= dt;
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      particle.vy += 28 * dt;
+      return particle.life > 0;
+    });
+
+    this.orbUnlockParticles = this.orbUnlockParticles.filter((particle) => {
+      particle.life -= dt;
+      particle.x += particle.vx * dt;
+      particle.y += particle.vy * dt;
+      return particle.life > 0;
+    });
+
     // advance limb animation phase based on movement speed
     const moveSpeed = Math.hypot(this.vx, this.vy);
     this.limbPhase += dt * (1 + moveSpeed / 80) * 6;
+  }
+
+  syncHeldItem(slotValue, gameData) {
+    if (!slotValue || typeof slotValue !== 'string' || !slotValue.startsWith('item:')) {
+      this.heldItemGraphic = null;
+      return;
+    }
+    const itemId = slotValue.split(':')[1];
+    const itemDef = (gameData.items || []).find((item) => item.id === itemId) || null;
+    this.heldItemGraphic = itemDef?.graphic || null;
+    this.heldItemColor = itemDef?.color || '#FFFFFF';
+  }
+
+  triggerLevelUp(level) {
+    this.levelUpDisplayTime = 2.1;
+    this.levelUpText = `LEVEL ${level}`;
+    for (let index = 0; index < 34; index++) {
+      const angle = (Math.PI * 2 * index) / 34 + Math.random() * 0.28;
+      const speed = 36 + Math.random() * 120;
+      this.levelUpParticles.push({
+        x: this.x,
+        y: this.y - this.radius * 0.7,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 24,
+        life: 0.85 + Math.random() * 0.7,
+        maxLife: 1.4,
+        size: 2 + Math.random() * 4,
+        color: index % 2 === 0 ? '#FFE45E' : '#A8FF8A'
+      });
+    }
+  }
+
+  triggerElementUnlock(color = '#FFFFFF') {
+    this.orbUnlockTime = 1.35;
+    this.orbUnlockColor = color;
+    this.actionTime = Math.max(this.actionTime, 0.9);
+    for (let index = 0; index < 28; index++) {
+      const angle = (Math.PI * 2 * index) / 28 + Math.random() * 0.22;
+      const speed = 24 + Math.random() * 96;
+      this.orbUnlockParticles.push({
+        x: this.x,
+        y: this.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.7 + Math.random() * 0.8,
+        size: 2 + Math.random() * 3.5,
+        color
+      });
+    }
+  }
+
+  drawCelebrationOverlay(ctx, canvas) {
+    if (this.levelUpDisplayTime <= 0) return;
+    const t = Math.max(0, Math.min(1, this.levelUpDisplayTime / 2.1));
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, t * 1.5);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 34px Arial';
+    ctx.fillStyle = '#FFF3A8';
+    ctx.fillText('LEVEL UP!', canvas.width / 2, 92);
+    ctx.font = 'bold 22px Arial';
+    ctx.fillStyle = '#AAFFCC';
+    ctx.fillText(this.levelUpText, canvas.width / 2, 120);
+    ctx.restore();
   }
 
   // ========== DRAWING ==========
@@ -158,6 +251,12 @@ export class PlayerController {
     const syGround = this.y - (camera ? camera.y : 0);
     const sy = syGround - this.z;
     const airScale = 1 + Math.min(0.34, this.z / 260);
+    const walkBlend = Math.min(1, Math.hypot(this.vx, this.vy) / 90);
+    const footSwing = Math.sin(this.limbPhase) * 4.8 * walkBlend;
+    const footSpread = Math.cos(this.limbPhase) * 1.8 * walkBlend;
+    const handAction = Math.max(this.castPulse, this.actionTime, this.orbUnlockTime * 0.85);
+    const handSwing = Math.sin(this.limbPhase * 1.45) * 4.6 * handAction;
+    const handLift = handAction * (4 + Math.sin(this.limbPhase * 1.2) * 2);
 
     // Ground shadow gets smaller as the player rises.
     const shadowScale = Math.max(0.58, 1 - this.z / 240);
@@ -180,6 +279,14 @@ export class PlayerController {
     ctx.beginPath();
     ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
     ctx.fill();
+    if (this.orbUnlockTime > 0) {
+      ctx.globalAlpha = 0.2 + this.orbUnlockTime * 0.28;
+      ctx.fillStyle = this.orbUnlockColor;
+      ctx.beginPath();
+      ctx.arc(0, 0, this.radius * (1.15 + handAction * 0.25), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     ctx.restore();
 
     // Cast feedback ring
@@ -194,21 +301,34 @@ export class PlayerController {
       ctx.restore();
     }
 
-    // Draw limbs: larger and closer to body for a chunkier look
-    const phase = this.limbPhase || 0;
-    const swing = Math.sin(phase) * 4;
+    // Draw limbs: feet move with walking, hands animate when using abilities or items.
     const drawRadius = this.radius * airScale;
     const offset = drawRadius + 4;
     const limbSize = Math.max(4, 6 * airScale);
     ctx.fillStyle = this.castColor || '#FFFFFF';
-    // left arm
-    ctx.beginPath(); ctx.arc(sx - offset + swing, sy - offset - swing * 0.5, limbSize, 0, Math.PI * 2); ctx.fill();
-    // right arm
-    ctx.beginPath(); ctx.arc(sx + offset - swing, sy - offset + swing * 0.5, limbSize, 0, Math.PI * 2); ctx.fill();
-    // left leg
-    ctx.beginPath(); ctx.arc(sx - offset + swing * 0.5, sy + offset - swing, limbSize, 0, Math.PI * 2); ctx.fill();
-    // right leg
-    ctx.beginPath(); ctx.arc(sx + offset - swing * 0.5, sy + offset + swing, limbSize, 0, Math.PI * 2); ctx.fill();
+    const leftHandX = sx - offset * 0.82 - handSwing * 0.45;
+    const leftHandY = sy - offset * 0.7 - handLift;
+    const rightHandX = sx + offset * 0.82 + handSwing * 0.55;
+    const rightHandY = sy - offset * 0.62 - handLift * 0.92;
+    const leftFootX = sx - offset * 0.46 - footSwing * 0.6;
+    const leftFootY = sy + offset - footSpread;
+    const rightFootX = sx + offset * 0.46 + footSwing * 0.6;
+    const rightFootY = sy + offset + footSpread;
+    ctx.beginPath(); ctx.arc(leftHandX, leftHandY, limbSize, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rightHandX, rightHandY, limbSize, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(leftFootX, leftFootY, limbSize, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(rightFootX, rightFootY, limbSize, 0, Math.PI * 2); ctx.fill();
+
+    if (this.heldItemGraphic) {
+      drawGraphicLayers(
+        ctx,
+        this.heldItemGraphic,
+        rightHandX + limbSize * 0.85,
+        rightHandY + limbSize * 0.1,
+        drawRadius * 0.95,
+        { rotation: 0.45 - handAction * 0.5 }
+      );
+    }
 
     // Hair style
     const hairStyle = this.characterMeta.hairStyle || 'none';
@@ -319,6 +439,25 @@ export class PlayerController {
     }
     ctx.stroke();
 
+    for (const particle of this.levelUpParticles) {
+      const alpha = Math.max(0, particle.life / (particle.maxLife || 1));
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x - (camera ? camera.x : 0), particle.y - (camera ? camera.y : 0) - this.z * 0.15, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    for (const particle of this.orbUnlockParticles) {
+      const alpha = Math.max(0, particle.life / 1.5);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x - (camera ? camera.x : 0), particle.y - (camera ? camera.y : 0) - this.z * 0.2, particle.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
     this.drawHealthBar(ctx, sx, sy, drawRadius);
   }
 
@@ -409,6 +548,7 @@ export class PlayerController {
   triggerCastFeedback(color = '#FFFFFF') {
     this.castColor = color;
     this.castPulse = 1;
+    this.actionTime = Math.max(this.actionTime, 0.72);
   }
 
   applyKnockback(fromX, fromY, force = 260) {
@@ -433,12 +573,16 @@ export class PlayerController {
 
   // ========== PROGRESSION ==========
   gainXP(amount) {
+    const reachedLevels = [];
     this.xp += amount;
     while (this.level < 10 && this.xp >= this._xpTable[this.level]) {
       this.level++;
       this.maxHp = Math.min(150, this.maxHp + 10);
       this.hp    = this.maxHp;
+      reachedLevels.push(this.level);
+      this.triggerLevelUp(this.level);
     }
+    return reachedLevels;
   }
 
   get xpToNext() {

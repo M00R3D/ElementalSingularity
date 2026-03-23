@@ -349,11 +349,18 @@ function drawMainStatsHudBars() {
   const showFps = !!pauseMenu.showFpsBar;
   const showMode = !!pauseMenu.showModeBar;
 
-  const panelW = 246;
+  const levelBoxW = 72;
+  const gap = 8;
+  const panelW = 318;
   const rowCount = 3 + (showEnemies ? 1 : 0) + (showFps ? 1 : 0) + (showMode ? 1 : 0);
   const panelH = 12 + rowCount * 28 + 10;
   const panelX = 24;
   const panelY = 10;
+  const baseBarX = panelX + 10;
+  const baseBarW = panelW - 20 - levelBoxW - gap;
+  const levelBoxX = baseBarX + baseBarW + gap;
+  const levelBoxH = 86;
+  const levelBoxY = panelY -6 + Math.max(0, (22 * 3 + 28 * 2 - levelBoxH) * 0.5);
 
   const hpRatio = player.maxHp > 0 ? player.hp / player.maxHp : 0;
   const manaRatio = gameState.playerStats.maxMana > 0
@@ -376,12 +383,30 @@ function drawMainStatsHudBars() {
   ctx.lineWidth = 1.5;
   ctx.strokeRect(panelX, panelY, panelW, panelH);
 
+  const levelGradient = ctx.createLinearGradient(levelBoxX, levelBoxY, levelBoxX, levelBoxY + levelBoxH);
+  levelGradient.addColorStop(0, 'rgba(255, 234, 126, 0.96)');
+  levelGradient.addColorStop(1, 'rgba(255, 157, 66, 0.92)');
+  ctx.fillStyle = levelGradient;
+  ctx.fillRect(levelBoxX, levelBoxY, levelBoxW, levelBoxH);
+  ctx.strokeStyle = 'rgba(255, 245, 210, 0.95)';
+  ctx.lineWidth = 1.4;
+  ctx.strokeRect(levelBoxX, levelBoxY, levelBoxW, levelBoxH);
+
+  ctx.fillStyle = '#5A2D00';
+  ctx.font = 'bold 11px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('LVL', levelBoxX + levelBoxW / 2, levelBoxY +20);
+  ctx.font = 'bold 31px Arial';
+  ctx.fillStyle = '#FFF9E8';
+  ctx.fillText(String(player.level || 1), levelBoxX + levelBoxW / 2, levelBoxY + levelBoxH * 0.7 );
+  ctx.textAlign = 'left';
+
   let barY = panelY + 10;
 
   drawAnimatedHudBar(
-    panelX + 10,
+    baseBarX,
     barY,
-    panelW - 20,
+    baseBarW,
     22,
     hpRatio,
     '#FF8F8F',
@@ -392,9 +417,9 @@ function drawMainStatsHudBars() {
   barY += 28;
 
   drawAnimatedHudBar(
-    panelX + 10,
+    baseBarX,
     barY,
-    panelW - 20,
+    baseBarW,
     22,
     manaRatio,
     '#71C7FF',
@@ -405,9 +430,9 @@ function drawMainStatsHudBars() {
   barY += 28;
 
   drawAnimatedHudBar(
-    panelX + 10,
+    baseBarX,
     barY,
-    panelW - 20,
+    baseBarW,
     22,
     xpRatio,
     '#B6FF82',
@@ -493,6 +518,8 @@ function tryConsumeSelectedOrb(slotId) {
   }
 
   if (gameState.unlockElement(elementId)) {
+    const elementData = GAME_DATA.elements.find((element) => element.id === elementId) || null;
+    player.triggerElementUnlock(elementData?.nameColor || '#FFFFFF');
     gameState.notify(`Elemento desbloqueado: ${elementId}`, '#AAFFCC', 1.3);
   } else {
     gameState.notify(`Ya tienes desbloqueado ${elementId}`, '#D5E6FF', 1.0);
@@ -501,6 +528,7 @@ function tryConsumeSelectedOrb(slotId) {
 }
 
 function canUseAbilityId(abilityId, notify = true) {
+  if (gameState.gameMode === 'creative') return true;
   const ability = GAME_DATA.abilities.find((a) => a.id === abilityId);
   if (!ability) return false;
   if (!gameState.hasElementUnlocked(ability.element)) {
@@ -1125,12 +1153,18 @@ function update(dt) {
   combatEngine.setCombatContext(entityManager.enemies, player, worldMap);
   worldMap.applyPuddleEffects(player, entityManager.enemies, dt);
   physicsSystem.resolveWorldCollisions();
+  player.syncHeldItem(gameState.hotbar[selectedSlot]?.abilityId || null, GAME_DATA);
 
   // Auto-pickup nearby drops
   const drops = worldMap.collectDrops(player, 36);
   for (const d of drops) {
     if (d.type === 'xp') {
-      player.gainXP(d.value || 0);
+      const leveledUp = player.gainXP(d.value || 0);
+      if (Array.isArray(leveledUp) && leveledUp.length > 0) {
+        for (const level of leveledUp) {
+          gameState.notify(`Subiste a nivel ${level}!`, '#FFF3A8', 1.5);
+        }
+      }
     } else {
       gameState.addItem(d.type, d.value || 1);
       gameState.notify(`Picked up: ${d.type} x${d.value || 1}`, '#DDEEFF', 0.5);
@@ -1177,6 +1211,7 @@ function draw() {
   // Draw entities
   entityManager.draw(ctx, camera);
   player.draw(ctx, camera);
+  player.drawCelebrationOverlay(ctx, canvas);
 
   if (pauseMenu.showHitboxes) {
     physicsSystem.drawHitboxOverlay(ctx, camera);
