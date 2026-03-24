@@ -19,9 +19,20 @@ export class CharacterSelectMenu {
     this.faceOptions = ['friendly', 'serious', 'grin'];
     this.sizeOptions = [12, 14, 15, 17, 19, 21];
     this.colorOptions = ['#ff7a59', '#4db6ff', '#7fd67f', '#ffd166', '#c68cff', '#f08a9a'];
-    this.accessoryOptions = ['none', 'bandana', 'glasses', 'earring', 'crown'];
-    this.hairStyleOptions = ['none', 'short', 'spike', 'mohawk', 'long'];
-    this.hairColorOptions = ['#2a1a12', '#4b2e20', '#7a4f2f', '#d8c18a', '#e86b3d', '#2d3a8a'];
+    this.accessoryOptions = ['none', 'bandana', 'glasses', 'earring', 'crown', 'headphones', 'mask'];
+    // 20 hair styles grouped by category
+    this.hairStyleOptions = [
+      'none',
+      // Anime (5)
+      'anime_ahoge', 'anime_twintails', 'anime_bangs', 'anime_straight', 'anime_spiky',
+      // Female (5)
+      'female_wavy', 'female_curly', 'female_braid', 'female_bob', 'female_half_up',
+      // Medieval (5)
+      'medieval_knight', 'medieval_maiden', 'medieval_noble', 'medieval_warrior', 'medieval_peasant',
+      // Ridiculous (5)
+      'ridiculous_poodle', 'ridiculous_neon', 'ridiculous_worm', 'ridiculous_bubble', 'ridiculous_afro'
+    ];
+    this.hairColorOptions = ['#2a1a12', '#4b2e20', '#7a4f2f', '#d8c18a', '#e86b3d', '#2d3a8a', '#ff69b4', '#00ff00', '#ff0080', '#ffff00'];
     this.eyeTypeOptions = ['round', 'sharp', 'sleepy', 'big'];
     this.starterElementOptions = ['fire', 'water', 'earth', 'air', 'lightning'];
 
@@ -30,7 +41,8 @@ export class CharacterSelectMenu {
       { key: 'size', label: 'Size', options: this.sizeOptions },
       { key: 'color', label: 'Body Color', options: this.colorOptions },
       { key: 'accessory', label: 'Accessory', options: this.accessoryOptions },
-      { key: 'hairStyle', label: 'Hair', options: this.hairStyleOptions },
+      { key: 'hairStyle', label: 'Hair Layer 1', options: this.hairStyleOptions },
+      { key: 'hairStyle2', label: 'Hair Layer 2', options: this.hairStyleOptions },
       { key: 'hairColor', label: 'Hair Color', options: this.hairColorOptions },
       { key: 'eyeType', label: 'Eye Type', options: this.eyeTypeOptions },
       { key: 'starterElement', label: 'Starter Element', options: this.starterElementOptions }
@@ -68,7 +80,8 @@ export class CharacterSelectMenu {
       size: 15,
       color: '#ff7a59',
       accessory: 'none',
-      hairStyle: 'short',
+      hairStyle: 'anime_straight',
+      hairStyle2: 'none',
       hairColor: '#4b2e20',
       eyeType: 'round',
       starterElement: 'fire'
@@ -297,19 +310,130 @@ export class CharacterSelectMenu {
 
   drawPreviewCharacter(ctx, x, y, meta) {
     const radius = Math.max(10, Math.min(24, Number(meta.size) || 15));
+    const hairStyle1 = meta.hairStyle || 'none';
+    const hairStyle2 = meta.hairStyle2 || 'none';
+    const hairColor = meta.hairColor || '#4b2e20';
+
+    if (hairStyle1 !== 'none') {
+      ctx.save();
+      ctx.fillStyle = hairColor;
+      ctx.strokeStyle = hairColor;
+      ctx.lineWidth = Math.max(1.1, radius * 0.12);
+      this._drawPreviewBackShell(ctx, x, y, radius);
+      this._drawPreviewHair(ctx, x, y, radius * 1.04, hairStyle1);
+      ctx.restore();
+    }
 
     ctx.fillStyle = meta.color || '#ff7a59';
     ctx.beginPath();
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
 
-    if ((meta.hairStyle || 'none') !== 'none') {
-      ctx.fillStyle = meta.hairColor || '#4b2e20';
-      ctx.beginPath();
-      ctx.arc(x, y - radius * 0.82, radius * 0.55, Math.PI, Math.PI * 2);
-      ctx.fill();
+    if (hairStyle2 !== 'none') {
+      ctx.save();
+      ctx.fillStyle = hairColor;
+      ctx.strokeStyle = this._darkenPreviewColor(hairColor, 0.18);
+      ctx.lineWidth = Math.max(1, radius * 0.06);
+      this._drawPreviewFrontFringe(ctx, x, y, radius, hairStyle2);
+      ctx.restore();
     }
 
+    // Draw accessories
+    const accessory = meta.accessory || 'none';
+    if (accessory === 'bandana') {
+      ctx.save();
+      ctx.fillStyle = '#d13d3d';
+      ctx.fillRect(x - radius * 0.75, y - radius * 0.55, radius * 1.5, radius * 0.3);
+      ctx.restore();
+    } else if (accessory === 'glasses') {
+      ctx.save();
+      const glassWidth = radius * 0.35;
+      const glassGap = radius * 0.1;
+      
+      // Lenses
+      ctx.fillStyle = '#e8f4f8';
+      ctx.beginPath();
+      ctx.arc(x - glassWidth - glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x + glassWidth + glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Frame
+      ctx.strokeStyle = '#101010';
+      ctx.lineWidth = Math.max(1.2, radius * 0.08);
+      ctx.beginPath();
+      ctx.arc(x - glassWidth - glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x + glassWidth + glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Bridge
+      ctx.lineWidth = Math.max(1, radius * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(x - glassGap * 0.5, y - radius * 0.3);
+      ctx.lineTo(x + glassGap * 0.5, y - radius * 0.3);
+      ctx.stroke();
+      ctx.restore();
+    } else if (accessory === 'earring') {
+      ctx.save();
+      const earringX = x + radius * 0.7;
+      const earringY = y - radius * 0.1;
+      const earringSize = radius * 0.2;
+      
+      ctx.fillStyle = '#ffd56a';
+      ctx.beginPath();
+      ctx.arc(earringX, earringY, earringSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.strokeStyle = '#d4a74a';
+      ctx.lineWidth = Math.max(1, radius * 0.06);
+      ctx.beginPath();
+      ctx.arc(earringX, earringY, earringSize, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    } else if (accessory === 'crown') {
+      ctx.save();
+      ctx.fillStyle = '#f2cb33';
+      ctx.beginPath();
+      ctx.moveTo(x - radius * 0.7, y - radius * 0.7);
+      ctx.lineTo(x - radius * 0.35, y - radius * 1.25);
+      ctx.lineTo(x, y - radius * 0.75);
+      ctx.lineTo(x + radius * 0.35, y - radius * 1.25);
+      ctx.lineTo(x + radius * 0.7, y - radius * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#c9a022';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } else if (accessory === 'headphones') {
+      ctx.save();
+      const bandY = y - radius * 0.86;
+      const earY = y - radius * 0.24;
+      ctx.strokeStyle = '#39475e';
+      ctx.lineWidth = Math.max(2, radius * 0.18);
+      ctx.beginPath();
+      ctx.arc(x, bandY, radius * 0.92, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+      ctx.fillStyle = '#53a4ff';
+      ctx.fillRect(x - radius * 1.02, earY, radius * 0.34, radius * 0.62);
+      ctx.fillRect(x + radius * 0.68, earY, radius * 0.34, radius * 0.62);
+      ctx.restore();
+    } else if (accessory === 'mask') {
+      ctx.save();
+      ctx.fillStyle = 'rgba(35, 45, 70, 0.94)';
+      ctx.beginPath();
+      ctx.roundRect(x - radius * 0.54, y - radius * 0.02, radius * 1.08, radius * 0.56, radius * 0.14);
+      ctx.fill();
+      ctx.strokeStyle = '#8fb5ff';
+      ctx.lineWidth = Math.max(1, radius * 0.06);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Face
     ctx.fillStyle = '#111111';
     const eyeOffset = Math.max(5, radius * 0.4);
     if ((meta.eyeType || 'round') === 'sharp') {
@@ -340,20 +464,271 @@ export class CharacterSelectMenu {
       ctx.arc(x, y + 3, 6, Math.PI * 0.1, Math.PI * 0.9);
     }
     ctx.stroke();
+  }
 
-    const accessory = meta.accessory || 'none';
-    if (accessory === 'bandana') {
-      ctx.fillStyle = '#d13d3d';
-      ctx.fillRect(x - radius * 0.75, y - radius * 0.62, radius * 1.5, radius * 0.22);
-    } else if (accessory === 'crown') {
-      ctx.fillStyle = '#f2cb33';
+  _darkenPreviewColor(hex, amount) {
+    const num = parseInt(String(hex || '#4b2e20').replace('#', ''), 16);
+    const r = Math.max(0, Math.min(255, Math.floor((num >> 16 & 255) * (1 - amount))));
+    const g = Math.max(0, Math.min(255, Math.floor((num >> 8 & 255) * (1 - amount))));
+    const b = Math.max(0, Math.min(255, Math.floor((num & 255) * (1 - amount))));
+    return '#' + [r, g, b].map((value) => value.toString(16).padStart(2, '0')).join('');
+  }
+
+  _drawPreviewBackShell(ctx, x, y, radius) {
+    ctx.beginPath();
+    ctx.ellipse(x, y - radius * 0.42, radius * 1.05, radius * 0.96, 0, Math.PI * 0.86, Math.PI * 2.14);
+    ctx.fill();
+    ctx.fillRect(x - radius * 0.9, y - radius * 0.38, radius * 0.28, radius * 0.9);
+    ctx.fillRect(x + radius * 0.62, y - radius * 0.38, radius * 0.28, radius * 0.9);
+    for (let i = 0; i < 3; i++) {
+      const spread = i - 1;
+      const strandX = x + spread * radius * 0.36;
+      const strandTop = y + radius * 0.42;
+      const strandLen = radius * (0.62 + Math.abs(spread) * 0.18);
+      const strandW = radius * 0.22;
       ctx.beginPath();
-      ctx.moveTo(x - radius * 0.68, y - radius * 0.72);
-      ctx.lineTo(x - radius * 0.3, y - radius * 1.2);
-      ctx.lineTo(x, y - radius * 0.72);
-      ctx.lineTo(x + radius * 0.3, y - radius * 1.2);
-      ctx.lineTo(x + radius * 0.68, y - radius * 0.72);
+      ctx.moveTo(strandX - strandW * 0.45, strandTop);
+      ctx.quadraticCurveTo(strandX - strandW * 0.3, strandTop + strandLen * 0.55, strandX, strandTop + strandLen);
+      ctx.quadraticCurveTo(strandX + strandW * 0.3, strandTop + strandLen * 0.55, strandX + strandW * 0.45, strandTop);
       ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  _drawPreviewFrontFringe(ctx, x, y, radius, hairStyle) {
+    const style = String(hairStyle || 'none').replace(/^(anime_|female_|medieval_|ridiculous_)/, '');
+    const profileMap = {
+      ahoge: { count: 2, width: 0.16, depth: 0.44, offset: 0.18 },
+      twintails: { count: 3, width: 0.15, depth: 0.48, offset: 0.2 },
+      bangs: { count: 4, width: 0.17, depth: 0.54, offset: 0.21 },
+      straight: { count: 3, width: 0.16, depth: 0.52, offset: 0.2 },
+      spiky: { count: 5, width: 0.13, depth: 0.56, offset: 0.2 },
+      wavy: { count: 3, width: 0.2, depth: 0.55, offset: 0.23 },
+      curly: { count: 4, width: 0.18, depth: 0.5, offset: 0.2 },
+      braid: { count: 2, width: 0.17, depth: 0.52, offset: 0.25 },
+      bob: { count: 3, width: 0.22, depth: 0.47, offset: 0.22 },
+      half_up: { count: 2, width: 0.18, depth: 0.5, offset: 0.2 },
+      knight: { count: 2, width: 0.2, depth: 0.44, offset: 0.2 },
+      maiden: { count: 3, width: 0.18, depth: 0.52, offset: 0.22 },
+      noble: { count: 3, width: 0.2, depth: 0.56, offset: 0.22 },
+      warrior: { count: 3, width: 0.16, depth: 0.53, offset: 0.2 },
+      peasant: { count: 3, width: 0.19, depth: 0.55, offset: 0.22 },
+      poodle: { count: 2, width: 0.22, depth: 0.42, offset: 0.2 },
+      neon: { count: 5, width: 0.12, depth: 0.5, offset: 0.2 },
+      worm: { count: 4, width: 0.1, depth: 0.56, offset: 0.18 },
+      bubble: { count: 3, width: 0.2, depth: 0.45, offset: 0.22 },
+      afro: { count: 3, width: 0.22, depth: 0.46, offset: 0.2 }
+    };
+    const profile = profileMap[style] || { count: 3, width: 0.18, depth: 0.52, offset: 0.22 };
+    const topY = y - radius * 0.96;
+    for (let i = 0; i < profile.count; i++) {
+      const spread = profile.count === 1 ? 0 : (i / (profile.count - 1)) * 2 - 1;
+      const strandX = x + spread * radius * profile.offset;
+      const strandW = radius * profile.width;
+      const length = radius * profile.depth * (0.94 + Math.abs(spread) * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(strandX - strandW * 0.5, topY);
+      ctx.quadraticCurveTo(strandX - strandW * 0.34, topY + length * 0.56, strandX, topY + length);
+      ctx.quadraticCurveTo(strandX + strandW * 0.34, topY + length * 0.56, strandX + strandW * 0.5, topY);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  _drawPreviewHair(ctx, x, y, radius, hairStyle) {
+    // Simplified hair rendering for preview - shows all 20 styles
+    if (hairStyle === 'short') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.82, radius * 0.52, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 1.1, radius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (hairStyle === 'anime_ahoge') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.84, radius * 0.66, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(x, y - radius * 1.0);
+      ctx.lineTo(x + radius * 0.22, y - radius * 2.0);
+      ctx.stroke();
+    } else if (hairStyle === 'anime_twintails') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.78, radius * 0.58, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        const tailBaseX = x + side * radius * 0.78;
+        const baseY = y - radius * 0.52;
+        ctx.fillRect(tailBaseX - radius * 0.18, baseY, radius * 0.36, radius * 1.02);
+        ctx.beginPath();
+        ctx.arc(tailBaseX, baseY + radius * 1.08, radius * 0.24, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (hairStyle === 'anime_bangs') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.75, radius * 0.62, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        const offset = (i - 1) * radius * 0.28;
+        ctx.fillRect(x + offset - radius * 0.1, y - radius * 0.2, radius * 0.2, radius * 0.65);
+      }
+    } else if (hairStyle === 'anime_straight') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.65, radius * 0.65, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        ctx.fillRect(x + side * radius * 0.65 - radius * 0.16, y - radius * 0.4, radius * 0.32, radius * 1.0);
+      }
+    } else if (hairStyle === 'anime_spiky') {
+      ctx.beginPath();
+      ctx.moveTo(x - radius * 0.72, y - radius * 0.42);
+      ctx.lineTo(x - radius * 0.48, y - radius * 1.72);
+      ctx.lineTo(x - radius * 0.16, y - radius * 0.54);
+      ctx.lineTo(x + radius * 0.06, y - radius * 1.92);
+      ctx.lineTo(x + radius * 0.28, y - radius * 0.56);
+      ctx.lineTo(x + radius * 0.52, y - radius * 1.78);
+      ctx.lineTo(x + radius * 0.78, y - radius * 0.42);
+      ctx.closePath();
+      ctx.fill();
+    } else if (hairStyle === 'female_wavy') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.6, radius * 0.72, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let side = -1; side <= 1; side += 2) {
+        for (let i = 0; i < 3; i++) {
+          const waveX = x + side * radius * 0.65;
+          const waveY = y - radius * 0.3 + i * radius * 0.35;
+          ctx.beginPath();
+          ctx.arc(waveX, waveY, radius * 0.28, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    } else if (hairStyle === 'female_curly') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.75, radius * 0.72, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 * i) / 8;
+        const cx = x + Math.cos(angle) * radius * 0.68;
+        const cy = y - radius * 0.45 + Math.sin(angle) * radius * 0.45;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (hairStyle === 'female_braid') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.7, radius * 0.58, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        for (let j = 0; j < 3; j++) {
+          ctx.fillRect(x + side * radius * 0.35 - radius * 0.12, y - radius * 0.4 + j * radius * 0.35, radius * 0.24, radius * 0.28);
+        }
+      }
+    } else if (hairStyle === 'female_bob') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.65, radius * 0.62, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.fillRect(x - radius * 0.7, y - radius * 0.4, radius * 0.35, radius * 0.65);
+      ctx.fillRect(x + radius * 0.35, y - radius * 0.4, radius * 0.35, radius * 0.65);
+    } else if (hairStyle === 'female_half_up') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.75, radius * 0.68, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 1.05, radius * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        ctx.fillRect(x + side * radius * 0.5 - radius * 0.14, y - radius * 0.35, radius * 0.28, radius * 0.85);
+      }
+    } else if (hairStyle === 'medieval_knight') {
+      ctx.fillRect(x - radius * 0.65, y - radius * 1.2, radius * 1.3, radius * 0.75);
+    } else if (hairStyle === 'medieval_maiden') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.75, radius * 0.7, Math.PI, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 1.15, radius * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        ctx.fillRect(x + side * radius * 0.68, y - radius * 0.3, radius * 0.22, radius * 1.1);
+      }
+    } else if (hairStyle === 'medieval_noble') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.8, radius * 0.82, Math.PI, Math.PI * 2);
+      ctx.fill();
+    } else if (hairStyle === 'medieval_warrior') {
+      ctx.fillRect(x - radius * 0.15, y - radius * 1.35, radius * 0.3, radius * 1.0);
+      for (let i = 0; i < 2; i++) {
+        const side = i === 0 ? -1 : 1;
+        ctx.fillRect(x + side * radius * 0.55, y - radius * 0.45, radius * 0.22, radius * 0.95);
+      }
+    } else if (hairStyle === 'medieval_peasant') {
+      ctx.fillRect(x - radius * 0.58, y - radius * 0.45, radius * 1.16, radius * 1.05);
+    } else if (hairStyle === 'ridiculous_poodle') {
+      for (let i = 0; i < 5; i++) {
+        const angle = (Math.PI * 2 * i) / 5;
+        const cx = x + Math.cos(angle) * radius * 0.72;
+        const cy = y - radius * 0.55 + Math.sin(angle) * radius * 0.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.42, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (hairStyle === 'ridiculous_neon') {
+      for (let i = 0; i < 8; i++) {
+        const angle = (Math.PI * 2 * i) / 8;
+        const startX = x + Math.cos(angle) * radius * 0.3;
+        const startY = y - radius * 0.5 + Math.sin(angle) * radius * 0.2;
+        const endX = x + Math.cos(angle) * radius * 1.0;
+        const endY = y - radius * 0.8 + Math.sin(angle) * radius * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.lineWidth = Math.max(2, radius * 0.25);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+    } else if (hairStyle === 'ridiculous_worm') {
+      for (let i = 0; i < 3; i++) {
+        const startX = x - radius * 0.35 + i * radius * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(startX, y - radius * 0.5);
+        for (let j = 0; j < 4; j++) {
+          ctx.lineTo(startX, y - radius * 0.5 + j * radius * 0.35);
+        }
+        ctx.lineWidth = Math.max(2, radius * 0.22);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+    } else if (hairStyle === 'ridiculous_bubble') {
+      for (let i = 0; i < 6; i++) {
+        const angle = (Math.PI * 2 * i) / 6;
+        const cx = x + Math.cos(angle) * radius * 0.65;
+        const cy = y - radius * 0.8;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.32, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (hairStyle === 'ridiculous_afro') {
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.5, radius * 0.9, Math.PI, Math.PI * 2);
+      ctx.fill();
+      for (let i = 0; i < 10; i++) {
+        const angle = (Math.PI * 2 * i) / 10;
+        const cx = x + Math.cos(angle) * radius * 0.85;
+        const cy = y - radius * 0.35 + Math.sin(angle) * radius * 0.5;
+        ctx.beginPath();
+        ctx.arc(cx, cy, radius * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      // Default fallback
+      ctx.beginPath();
+      ctx.arc(x, y - radius * 0.8, radius * 0.55, Math.PI, Math.PI * 2);
       ctx.fill();
     }
   }

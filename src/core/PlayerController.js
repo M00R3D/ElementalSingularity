@@ -40,6 +40,7 @@ export class PlayerController {
       color: '#FF6347',
       accessory: 'none',
       hairStyle: 'short',
+      hairStyle2: 'none',
       hairColor: '#4b2e20',
       eyeType: 'round',
       starterElement: 'fire'
@@ -81,6 +82,16 @@ export class PlayerController {
       ...this.characterMeta,
       ...meta
     };
+    // Ensure all character customization fields have valid values
+    next.hairStyle = meta.hairStyle || next.hairStyle || 'anime_straight';
+    next.hairStyle2 = meta.hairStyle2 !== undefined ? meta.hairStyle2 : (next.hairStyle2 || 'none');
+    next.accessory = meta.accessory || next.accessory || 'none';
+    next.hairColor = meta.hairColor || next.hairColor || '#4b2e20';
+    next.faceType = meta.faceType || next.faceType || 'friendly';
+    next.eyeType = meta.eyeType || next.eyeType || 'round';
+    next.color = meta.color || next.color || '#ff7a59';
+    next.size = meta.size !== undefined ? meta.size : (next.size || 15);
+    
     this.characterMeta = next;
     this.radius = Math.max(10, Math.min(24, Number(next.size) || 15));
     this.color = next.color || this.color;
@@ -244,6 +255,392 @@ export class PlayerController {
     ctx.restore();
   }
 
+  drawHairWithStrands(ctx, sx, sy, drawRadius, hairStyle, hairColor, walkBlend, limbPhase, handAction, hairStyle2, hairColor2, layerRole = 'back') {
+    if (hairStyle === 'none' && hairStyle2 === 'none') return;
+    const swayIntensity = walkBlend * 0.8 * (1 - handAction * 0.5);
+    const baseAngleOffset = Math.sin(limbPhase * 1.2) * 0.3 * swayIntensity;
+
+    if (layerRole === 'back') {
+      if (!hairStyle || hairStyle === 'none') return;
+      ctx.save();
+      ctx.fillStyle = hairColor;
+      ctx.strokeStyle = hairColor;
+      ctx.lineWidth = Math.max(1.2, drawRadius * 0.14);
+      // Base shell keeps layer 1 wrapping the head from behind.
+      this._drawHairBackShell(ctx, sx, sy, drawRadius, swayIntensity, limbPhase);
+      this._drawHairStyle(ctx, sx, sy, drawRadius * 1.06, hairStyle, swayIntensity, limbPhase, baseAngleOffset);
+      ctx.restore();
+      return;
+    }
+
+    if (!hairStyle2 || hairStyle2 === 'none') return;
+    ctx.save();
+    const color2 = hairColor2 || hairColor;
+    ctx.fillStyle = this._darkenColor(color2, 0.08);
+    ctx.strokeStyle = this._darkenColor(color2, 0.18);
+    ctx.lineWidth = Math.max(1, drawRadius * 0.08);
+    this._drawHairFrontFringe(ctx, sx, sy, drawRadius, hairStyle2, swayIntensity * 0.85, limbPhase);
+    ctx.restore();
+  }
+
+  _darkenColor(hex, amount) {
+    const num = parseInt(hex.replace('#', ''), 16);
+    const r = Math.max(0, Math.min(255, Math.floor((num >> 16 & 255) * (1 - amount))));
+    const g = Math.max(0, Math.min(255, Math.floor((num >> 8 & 255) * (1 - amount))));
+    const b = Math.max(0, Math.min(255, Math.floor((num & 255) * (1 - amount))));
+    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+  }
+
+  _drawHairBackShell(ctx, sx, sy, drawRadius, swayIntensity, limbPhase) {
+    const sideSway = Math.sin(limbPhase * 1.15) * drawRadius * 0.06 * swayIntensity;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy - drawRadius * 0.42, drawRadius * 1.05, drawRadius * 0.96, 0, Math.PI * 0.86, Math.PI * 2.14);
+    ctx.fill();
+    ctx.fillRect(sx - drawRadius * 0.9 + sideSway, sy - drawRadius * 0.38, drawRadius * 0.28, drawRadius * 0.9);
+    ctx.fillRect(sx + drawRadius * 0.62 + sideSway, sy - drawRadius * 0.38, drawRadius * 0.28, drawRadius * 0.9);
+    // Rear strands hanging below the body silhouette.
+    for (let i = 0; i < 3; i++) {
+      const spread = i - 1;
+      const sway = Math.sin(limbPhase * 1.1 + i * 0.7) * drawRadius * 0.09 * swayIntensity;
+      const strandX = sx + spread * drawRadius * 0.36 + sway;
+      const strandTop = sy + drawRadius * 0.42;
+      const strandLen = drawRadius * (0.62 + Math.abs(spread) * 0.18);
+      const strandW = drawRadius * 0.22;
+      ctx.beginPath();
+      ctx.moveTo(strandX - strandW * 0.45, strandTop);
+      ctx.quadraticCurveTo(strandX - strandW * 0.3, strandTop + strandLen * 0.55, strandX, strandTop + strandLen);
+      ctx.quadraticCurveTo(strandX + strandW * 0.3, strandTop + strandLen * 0.55, strandX + strandW * 0.45, strandTop);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  _drawHairFrontFringe(ctx, sx, sy, drawRadius, hairStyle, swayIntensity, limbPhase) {
+    const style = String(hairStyle || 'none').replace(/^(anime_|female_|medieval_|ridiculous_)/, '');
+    const profileMap = {
+      ahoge: { count: 2, width: 0.16, depth: 0.44, offset: 0.18 },
+      twintails: { count: 3, width: 0.15, depth: 0.48, offset: 0.2 },
+      bangs: { count: 4, width: 0.17, depth: 0.54, offset: 0.21 },
+      straight: { count: 3, width: 0.16, depth: 0.52, offset: 0.2 },
+      spiky: { count: 5, width: 0.13, depth: 0.56, offset: 0.2 },
+      wavy: { count: 3, width: 0.2, depth: 0.55, offset: 0.23 },
+      curly: { count: 4, width: 0.18, depth: 0.5, offset: 0.2 },
+      braid: { count: 2, width: 0.17, depth: 0.52, offset: 0.25 },
+      bob: { count: 3, width: 0.22, depth: 0.47, offset: 0.22 },
+      half_up: { count: 2, width: 0.18, depth: 0.5, offset: 0.2 },
+      knight: { count: 2, width: 0.2, depth: 0.44, offset: 0.2 },
+      maiden: { count: 3, width: 0.18, depth: 0.52, offset: 0.22 },
+      noble: { count: 3, width: 0.2, depth: 0.56, offset: 0.22 },
+      warrior: { count: 3, width: 0.16, depth: 0.53, offset: 0.2 },
+      peasant: { count: 3, width: 0.19, depth: 0.55, offset: 0.22 },
+      poodle: { count: 2, width: 0.22, depth: 0.42, offset: 0.2 },
+      neon: { count: 5, width: 0.12, depth: 0.5, offset: 0.2 },
+      worm: { count: 4, width: 0.1, depth: 0.56, offset: 0.18 },
+      bubble: { count: 3, width: 0.2, depth: 0.45, offset: 0.22 },
+      afro: { count: 3, width: 0.22, depth: 0.46, offset: 0.2 }
+    };
+    const profile = profileMap[style] || { count: 3, width: 0.18, depth: 0.52, offset: 0.22 };
+    const topY = sy - drawRadius * 0.96;
+    for (let i = 0; i < profile.count; i++) {
+      const spread = profile.count === 1 ? 0 : (i / (profile.count - 1)) * 2 - 1;
+      const sway = Math.sin(limbPhase * 1.35 + i * 0.6) * drawRadius * 0.11 * swayIntensity;
+      const strandX = sx + spread * drawRadius * profile.offset + sway;
+      const strandW = drawRadius * profile.width;
+      const length = drawRadius * profile.depth * (0.94 + Math.abs(spread) * 0.12);
+      ctx.beginPath();
+      ctx.moveTo(strandX - strandW * 0.5, topY);
+      ctx.quadraticCurveTo(strandX - strandW * 0.34, topY + length * 0.56, strandX, topY + length);
+      ctx.quadraticCurveTo(strandX + strandW * 0.34, topY + length * 0.56, strandX + strandW * 0.5, topY);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  _drawHairStyle(ctx, sx, sy, drawRadius, hairStyle, swayIntensity, limbPhase, baseAngleOffset) {
+    const strandCount = 2;
+
+    // Base hair shape by style
+    if (hairStyle === 'short') {
+      // Compact dome shape
+      ctx.beginPath();
+      ctx.arc(sx, sy - drawRadius * 0.82, drawRadius * 0.52, Math.PI, Math.PI * 2);
+      ctx.fill();
+      // Add a small front tuft
+      ctx.beginPath();
+      ctx.arc(sx, sy - drawRadius * 1.1, drawRadius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (hairStyle.startsWith('anime_')) {
+      const substyle = hairStyle.replace('anime_', '');
+      if (substyle === 'ahoge') {
+        // Exaggerated anime ahoge with long sweeping strand
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.84, drawRadius * 0.66, Math.PI, Math.PI * 2);
+        ctx.fill();
+        const swayX = Math.sin(limbPhase * 1.6) * drawRadius * 0.42 * swayIntensity;
+        // Long prominent ahoge strand
+        ctx.beginPath();
+        ctx.moveTo(sx + swayX * 0.4, sy - drawRadius * 1.0);
+        ctx.quadraticCurveTo(sx + swayX * 0.9, sy - drawRadius * 1.85, sx + swayX * 1.35, sy - drawRadius * 2.05);
+        ctx.lineWidth = Math.max(2.6, drawRadius * 0.22);
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      } else if (substyle === 'twintails') {
+        // Exaggerated twin tails with bigger and longer volumes
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.78, drawRadius * 0.58, Math.PI, Math.PI * 2);
+        ctx.fill();
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          const tailBaseX = sx + side * drawRadius * 0.78;
+          const baseY = sy - drawRadius * 0.52;
+          const sway = Math.sin(limbPhase + i * Math.PI) * drawRadius * 0.5 * swayIntensity;
+          ctx.fillRect(tailBaseX + sway - drawRadius * 0.18, baseY, drawRadius * 0.36, drawRadius * 1.02);
+          // Add pom-pom at end
+          ctx.beginPath();
+          ctx.arc(tailBaseX + sway, baseY + drawRadius * 1.08, drawRadius * 0.24, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (substyle === 'bangs') {
+        // Rounded top with heavy front bangs
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.75, drawRadius * 0.62, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Three prominent swaying bangs
+        for (let i = 0; i < 3; i++) {
+          const offset = (i - 1) * drawRadius * 0.28;
+          const sway = Math.sin(limbPhase + i * 0.8) * drawRadius * 0.2 * swayIntensity;
+          ctx.fillRect(sx + offset + sway - drawRadius * 0.1, sy - drawRadius * 0.2, drawRadius * 0.2, drawRadius * 0.65);
+        }
+      } else if (substyle === 'straight') {
+        // Long straight hair down the sides
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.65, drawRadius * 0.65, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Two long side strands
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          const strandX = sx + side * drawRadius * 0.65;
+          const sway = Math.sin(limbPhase + i * 1.3) * drawRadius * 0.12 * swayIntensity;
+          ctx.fillRect(strandX + sway - drawRadius * 0.16, sy - drawRadius * 0.4, drawRadius * 0.32, drawRadius * 1.2);
+        }
+      } else if (substyle === 'spiky') {
+        // Extra long, sharp anime spikes.
+        ctx.beginPath();
+        ctx.moveTo(sx - drawRadius * 0.72, sy - drawRadius * 0.42);
+        ctx.lineTo(sx - drawRadius * 0.48, sy - drawRadius * 1.72);
+        ctx.lineTo(sx - drawRadius * 0.16, sy - drawRadius * 0.54);
+        ctx.lineTo(sx + drawRadius * 0.06, sy - drawRadius * 1.92);
+        ctx.lineTo(sx + drawRadius * 0.28, sy - drawRadius * 0.56);
+        ctx.lineTo(sx + drawRadius * 0.52, sy - drawRadius * 1.78);
+        ctx.lineTo(sx + drawRadius * 0.78, sy - drawRadius * 0.42);
+        ctx.closePath();
+        ctx.fill();
+        for (let i = 0; i < 5; i++) {
+          const sway = Math.sin(limbPhase * 1.55 + i * 0.52) * drawRadius * 0.2 * swayIntensity;
+          const x = sx - drawRadius * 0.44 + i * drawRadius * 0.23;
+          ctx.beginPath();
+          ctx.moveTo(x, sy - drawRadius * 1.16);
+          ctx.lineTo(x + sway, sy - drawRadius * 1.48);
+          ctx.lineTo(x + drawRadius * 0.08, sy - drawRadius * 1.14);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+    } else if (hairStyle.startsWith('female_')) {
+      const substyle = hairStyle.replace('female_', '');
+      if (substyle === 'wavy') {
+        // Tall dome with animated side waves
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.62, drawRadius * 0.72, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Three animated wave sections on each side
+        for (let side = -1; side <= 1; side += 2) {
+          for (let i = 0; i < 3; i++) {
+            const waveX = sx + side * drawRadius * 0.65 + Math.sin(limbPhase + i * 0.4) * drawRadius * 0.22 * swayIntensity;
+            const waveY = sy - drawRadius * 0.3 + i * drawRadius * 0.35;
+            ctx.beginPath();
+            ctx.arc(waveX, waveY, drawRadius * 0.28, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      } else if (substyle === 'curly') {
+        // Large volume curly hair with bouncy curls
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.75, drawRadius * 0.72, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // 8 bouncy curls around the head
+        for (let i = 0; i < 8; i++) {
+          const angle = (Math.PI * 2 * i) / 8;
+          const bounce = Math.sin(limbPhase * 1.6 + i) * drawRadius * 0.25 * swayIntensity;
+          const cx = sx + Math.cos(angle) * drawRadius * 0.68 + bounce * 0.4;
+          const cy = sy - drawRadius * 0.45 + Math.sin(angle) * drawRadius * 0.45 + bounce;
+          ctx.beginPath();
+          ctx.arc(cx, cy, drawRadius * 0.32, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (substyle === 'braid') {
+        // Rounded top with duo braids down the back
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.7, drawRadius * 0.58, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Two braids on sides
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          const braidX = sx + side * drawRadius * 0.35;
+          const sway = Math.sin(limbPhase + i * Math.PI) * drawRadius * 0.16 * swayIntensity;
+          for (let j = 0; j < 4; j++) {
+            ctx.fillRect(braidX + sway * 0.5 - drawRadius * 0.12, sy - drawRadius * 0.4 + j * drawRadius * 0.35, drawRadius * 0.24, drawRadius * 0.28);
+          }
+        }
+      } else if (substyle === 'bob') {
+        // Short and cute bob style
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.65, drawRadius * 0.62, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Two side flaps
+        ctx.fillRect(sx - drawRadius * 0.7, sy - drawRadius * 0.4, drawRadius * 0.35, drawRadius * 0.65);
+        ctx.fillRect(sx + drawRadius * 0.35, sy - drawRadius * 0.4, drawRadius * 0.35, drawRadius * 0.65);
+      } else if (substyle === 'half_up') {
+        // Half up bun with long loose strands
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.75, drawRadius * 0.68, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Bun at top
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 1.05, drawRadius * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+        // Two long loose strands
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          const sway = Math.sin(limbPhase + i) * drawRadius * 0.18 * swayIntensity;
+          ctx.fillRect(sx + side * drawRadius * 0.5 + sway - drawRadius * 0.14, sy - drawRadius * 0.35, drawRadius * 0.28, drawRadius * 0.85);
+        }
+      }
+    } else if (hairStyle.startsWith('medieval_')) {
+      const substyle = hairStyle.replace('medieval_', '');
+      if (substyle === 'knight') {
+        // Helmet-like hair
+        ctx.fillRect(sx - drawRadius * 0.65, sy - drawRadius * 1.2, drawRadius * 1.3, drawRadius * 0.75);
+        // Face coverage
+        ctx.fillRect(sx - drawRadius * 0.5, sy - drawRadius * 0.6, drawRadius * 1.0, drawRadius * 0.35);
+      } else if (substyle === 'maiden') {
+        // Maiden bun style with loose sides
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.75, drawRadius * 0.7, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Rear bun
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 1.15, drawRadius * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        // Long loose side strands
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          const sway = Math.sin(limbPhase + i * Math.PI) * drawRadius * 0.2 * swayIntensity;
+          ctx.fillRect(sx + side * drawRadius * 0.68 + sway, sy - drawRadius * 0.3, drawRadius * 0.22, drawRadius * 1.1);
+        }
+      } else if (substyle === 'noble') {
+        // Large flowing noble locks
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.8, drawRadius * 0.82, Math.PI, Math.PI * 2);
+        ctx.fill();
+        // Side ringlets
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          ctx.beginPath();
+          ctx.arc(sx + side * drawRadius * 0.75, sy - drawRadius * 0.2, drawRadius * 0.28, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (substyle === 'warrior') {
+        // Warrior braided style with multiple braids
+        // Central braid
+        ctx.fillRect(sx - drawRadius * 0.15, sy - drawRadius * 1.35, drawRadius * 0.3, drawRadius * 1.0);
+        // Two side braids
+        for (let i = 0; i < 2; i++) {
+          const side = i === 0 ? -1 : 1;
+          const sway = Math.sin(limbPhase + i) * drawRadius * 0.12 * swayIntensity;
+          ctx.fillRect(sx + side * drawRadius * 0.55 + sway, sy - drawRadius * 0.45, drawRadius * 0.22, drawRadius * 0.95);
+        }
+      } else if (substyle === 'peasant') {
+        // Simple long peasant hair
+        const sway = Math.sin(limbPhase) * drawRadius * 0.15 * swayIntensity;
+        ctx.fillRect(sx - drawRadius * 0.58 + sway, sy - drawRadius * 0.45, drawRadius * 1.16, drawRadius * 1.05);
+      }
+    } else if (hairStyle.startsWith('ridiculous_')) {
+      const substyle = hairStyle.replace('ridiculous_', '');
+      if (substyle === 'poodle') {
+        // Giant poodle pom-poms
+        for (let i = 0; i < 5; i++) {
+          const angle = (Math.PI * 2 * i) / 5;
+          const bounce = Math.sin(limbPhase * 1.8 + i) * drawRadius * 0.35 * swayIntensity;
+          const cx = sx + Math.cos(angle) * drawRadius * 0.72 + bounce * 0.3;
+          const cy = sy - drawRadius * 0.55 + Math.sin(angle) * drawRadius * 0.5 + bounce;
+          ctx.beginPath();
+          ctx.arc(cx, cy, drawRadius * 0.42, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (substyle === 'neon') {
+        // Wild neon spikes in all directions
+        for (let i = 0; i < 8; i++) {
+          const angle = (Math.PI * 2 * i) / 8;
+          const sway = Math.sin(limbPhase * 2.2 + i * 0.6) * drawRadius * 0.4 * swayIntensity;
+          const startX = sx + Math.cos(angle) * drawRadius * 0.3;
+          const startY = sy - drawRadius * 0.5 + Math.sin(angle) * drawRadius * 0.2;
+          const endX = sx + Math.cos(angle) * drawRadius * 1.0 + sway;
+          const endY = sy - drawRadius * 0.8 + Math.sin(angle) * drawRadius * 0.35 + sway;
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.lineWidth = Math.max(2.5, drawRadius * 0.25);
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+      } else if (substyle === 'worm') {
+        // Wiggling worm-like strands
+        for (let i = 0; i < 3; i++) {
+          const startX = sx - drawRadius * 0.35 + i * drawRadius * 0.35;
+          ctx.beginPath();
+          ctx.moveTo(startX, sy - drawRadius * 0.5);
+          for (let j = 0; j < 5; j++) {
+            const wave = Math.sin(limbPhase * 1.8 + i + j * 0.6) * drawRadius * 0.25 * swayIntensity;
+            ctx.lineTo(startX + wave, sy - drawRadius * 0.5 + j * drawRadius * 0.35);
+          }
+          ctx.lineWidth = Math.max(2, drawRadius * 0.22);
+          ctx.lineCap = 'round';
+          ctx.stroke();
+        }
+      } else if (substyle === 'bubble') {
+        // Giant bouncy bubbles
+        for (let i = 0; i < 6; i++) {
+          const angle = (Math.PI * 2 * i) / 6;
+          const bounce = Math.sin(limbPhase * 2.0 + i) * drawRadius * 0.4 * swayIntensity;
+          const cx = sx + Math.cos(angle) * drawRadius * 0.65 + bounce * 0.25;
+          const cy = sy - drawRadius * 0.8 + bounce;
+          ctx.beginPath();
+          ctx.arc(cx, cy, drawRadius * 0.32, 0, Math.PI * 2);
+          ctx.fill();
+          // Bubble outline
+          ctx.strokeStyle = ctx.fillStyle;
+          ctx.lineWidth = Math.max(1, drawRadius * 0.08);
+          ctx.stroke();
+        }
+      } else if (substyle === 'afro') {
+        // Giant afro with bouncy curls
+        ctx.beginPath();
+        ctx.arc(sx, sy - drawRadius * 0.5, drawRadius * 0.9, Math.PI, Math.PI * 2);
+        ctx.fill();
+        for (let i = 0; i < 10; i++) {
+          const angle = (Math.PI * 2 * i) / 10;
+          const bounce = Math.sin(limbPhase * 1.7 + i) * drawRadius * 0.2 * swayIntensity;
+          const cx = sx + Math.cos(angle) * drawRadius * 0.85 + bounce * 0.3;
+          const cy = sy - drawRadius * 0.35 + Math.sin(angle) * drawRadius * 0.5 + bounce;
+          ctx.beginPath();
+          ctx.arc(cx, cy, drawRadius * 0.28, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
   // ========== DRAWING ==========
   draw(ctx, camera = null) {
     if (!this.isAlive) return;
@@ -258,6 +655,11 @@ export class PlayerController {
     const handSwing = Math.sin(this.limbPhase * 1.45) * 4.6 * handAction;
     const handLift = handAction * (4 + Math.sin(this.limbPhase * 1.2) * 2);
 
+    const drawRadius = this.radius * airScale;
+    const hairStyle = this.characterMeta.hairStyle || 'none';
+    const hairStyle2 = this.characterMeta.hairStyle2 || 'none';
+    const hairColor = this.characterMeta.hairColor || '#4b2e20';
+
     // Ground shadow gets smaller as the player rises.
     const shadowScale = Math.max(0.58, 1 - this.z / 240);
     const shadowAlpha = Math.max(0.12, 0.26 - this.z / 1800);
@@ -267,6 +669,9 @@ export class PlayerController {
     ctx.ellipse(sx, syGround + this.radius * 0.65, this.radius * shadowScale, this.radius * 0.46 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // Hair layer 1 is rendered behind the body for more volume and readability.
+    this.drawHairWithStrands(ctx, sx, sy, drawRadius, hairStyle, hairColor, walkBlend, this.limbPhase, handAction, hairStyle2, hairColor, 'back');
 
     // Body with slight squash/stretch deformation based on movement and cast
     ctx.save();
@@ -302,7 +707,6 @@ export class PlayerController {
     }
 
     // Draw limbs: feet move with walking, hands animate when using abilities or items.
-    const drawRadius = this.radius * airScale;
     const offset = drawRadius + 4;
     const limbSize = Math.max(4, 6 * airScale);
     ctx.fillStyle = this.castColor || '#FFFFFF';
@@ -330,65 +734,108 @@ export class PlayerController {
       );
     }
 
-    // Hair style
-    const hairStyle = this.characterMeta.hairStyle || 'none';
-    const hairColor = this.characterMeta.hairColor || '#4b2e20';
-    if (hairStyle !== 'none') {
-      ctx.fillStyle = hairColor;
-      if (hairStyle === 'short') {
-        ctx.beginPath();
-        ctx.arc(sx, sy - drawRadius * 0.85, drawRadius * 0.55, Math.PI, Math.PI * 2);
-        ctx.fill();
-      } else if (hairStyle === 'spike') {
-        ctx.beginPath();
-        ctx.moveTo(sx - drawRadius * 0.65, sy - drawRadius * 0.35);
-        ctx.lineTo(sx - drawRadius * 0.2, sy - drawRadius * 1.15);
-        ctx.lineTo(sx + drawRadius * 0.1, sy - drawRadius * 0.45);
-        ctx.lineTo(sx + drawRadius * 0.4, sy - drawRadius * 1.2);
-        ctx.lineTo(sx + drawRadius * 0.7, sy - drawRadius * 0.35);
-        ctx.closePath();
-        ctx.fill();
-      } else if (hairStyle === 'mohawk') {
-        ctx.fillRect(sx - drawRadius * 0.12, sy - drawRadius * 1.25, drawRadius * 0.24, drawRadius * 0.95);
-      } else if (hairStyle === 'long') {
-        ctx.beginPath();
-        ctx.arc(sx, sy - drawRadius * 0.45, drawRadius * 0.72, Math.PI, Math.PI * 2);
-        ctx.fill();
-        ctx.fillRect(sx - drawRadius * 0.72, sy - drawRadius * 0.5, drawRadius * 0.22, drawRadius * 1.0);
-        ctx.fillRect(sx + drawRadius * 0.5, sy - drawRadius * 0.5, drawRadius * 0.22, drawRadius * 1.0);
-      }
-    }
+    // Hair layer 2 is rendered as front fringe/flecos.
+    this.drawHairWithStrands(ctx, sx, sy, drawRadius, hairStyle, hairColor, walkBlend, this.limbPhase, handAction, hairStyle2, hairColor, 'front');
 
     // Accessory
     const accessory = this.characterMeta.accessory || 'none';
     if (accessory === 'bandana') {
+      ctx.save();
       ctx.fillStyle = '#d13d3d';
-      ctx.fillRect(sx - drawRadius * 0.78, sy - drawRadius * 0.62, drawRadius * 1.56, drawRadius * 0.23);
+      ctx.fillRect(sx - drawRadius * 0.75, sy - drawRadius * 0.55, drawRadius * 1.5, drawRadius * 0.3);
+      ctx.restore();
     } else if (accessory === 'glasses') {
-      ctx.strokeStyle = '#101010';
-      ctx.lineWidth = 1.6;
-      ctx.strokeRect(sx - 7.5, sy - 6.5, 5, 4.8);
-      ctx.strokeRect(sx + 2.5, sy - 6.5, 5, 4.8);
+      ctx.save();
+      const glassFrameColor = '#101010';
+      const glassWidth = drawRadius * 0.35;
+      const glassHeight = drawRadius * 0.25;
+      const glassGap = drawRadius * 0.1;
+      
+      // Left lens - filled circle
+      ctx.fillStyle = '#e8f4f8';
       ctx.beginPath();
-      ctx.moveTo(sx - 2.5, sy - 4.2);
-      ctx.lineTo(sx + 2.5, sy - 4.2);
+      ctx.arc(sx - glassWidth - glassGap * 0.5, sy - drawRadius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Right lens - filled circle
+      ctx.beginPath();
+      ctx.arc(sx + glassWidth + glassGap * 0.5, sy - drawRadius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Frame border
+      ctx.strokeStyle = glassFrameColor;
+      ctx.lineWidth = Math.max(2, drawRadius * 0.08);
+      ctx.beginPath();
+      ctx.arc(sx - glassWidth - glassGap * 0.5, sy - drawRadius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(sx + glassWidth + glassGap * 0.5, sy - drawRadius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
+      ctx.stroke();
+      
+      // Bridge
+      ctx.lineWidth = Math.max(2, drawRadius * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(sx - glassGap * 0.5, sy - drawRadius * 0.3);
+      ctx.lineTo(sx + glassGap * 0.5, sy - drawRadius * 0.3);
+      ctx.stroke();
+      ctx.restore();
     } else if (accessory === 'earring') {
-      ctx.strokeStyle = '#ffd56a';
-      ctx.lineWidth = 1.6;
+      ctx.save();
+      const earringX = sx + drawRadius * 0.7;
+      const earringY = sy - drawRadius * 0.1;
+      const earringSize = drawRadius * 0.2;
+      
+      // Golden circle earring
+      ctx.fillStyle = '#ffd56a';
       ctx.beginPath();
-      ctx.arc(sx + drawRadius * 0.95, sy - 1, 2.1 * airScale, 0, Math.PI * 2);
+      ctx.arc(earringX, earringY, earringSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Border for depth
+      ctx.strokeStyle = '#d4a74a';
+      ctx.lineWidth = Math.max(1.5, drawRadius * 0.06);
+      ctx.beginPath();
+      ctx.arc(earringX, earringY, earringSize, 0, Math.PI * 2);
       ctx.stroke();
+      ctx.restore();
     } else if (accessory === 'crown') {
+      ctx.save();
       ctx.fillStyle = '#f2cb33';
       ctx.beginPath();
-      ctx.moveTo(sx - drawRadius * 0.7, sy - drawRadius * 0.72);
-      ctx.lineTo(sx - drawRadius * 0.35, sy - drawRadius * 1.2);
-      ctx.lineTo(sx, sy - drawRadius * 0.74);
-      ctx.lineTo(sx + drawRadius * 0.35, sy - drawRadius * 1.2);
-      ctx.lineTo(sx + drawRadius * 0.7, sy - drawRadius * 0.72);
+      ctx.moveTo(sx - drawRadius * 0.7, sy - drawRadius * 0.7);
+      ctx.lineTo(sx - drawRadius * 0.35, sy - drawRadius * 1.25);
+      ctx.lineTo(sx, sy - drawRadius * 0.75);
+      ctx.lineTo(sx + drawRadius * 0.35, sy - drawRadius * 1.25);
+      ctx.lineTo(sx + drawRadius * 0.7, sy - drawRadius * 0.7);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = '#c9a022';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    } else if (accessory === 'headphones') {
+      ctx.save();
+      const bandY = sy - drawRadius * 0.86;
+      const earY = sy - drawRadius * 0.24;
+      ctx.strokeStyle = '#39475e';
+      ctx.lineWidth = Math.max(2, drawRadius * 0.18);
+      ctx.beginPath();
+      ctx.arc(sx, bandY, drawRadius * 0.92, Math.PI * 1.08, Math.PI * 1.92);
+      ctx.stroke();
+      ctx.fillStyle = '#53a4ff';
+      ctx.fillRect(sx - drawRadius * 1.02, earY, drawRadius * 0.34, drawRadius * 0.62);
+      ctx.fillRect(sx + drawRadius * 0.68, earY, drawRadius * 0.34, drawRadius * 0.62);
+      ctx.restore();
+    } else if (accessory === 'mask') {
+      ctx.save();
+      ctx.fillStyle = 'rgba(35, 45, 70, 0.94)';
+      ctx.beginPath();
+      ctx.roundRect(sx - drawRadius * 0.54, sy - drawRadius * 0.02, drawRadius * 1.08, drawRadius * 0.56, drawRadius * 0.14);
+      ctx.fill();
+      ctx.strokeStyle = '#8fb5ff';
+      ctx.lineWidth = Math.max(1, drawRadius * 0.06);
+      ctx.stroke();
+      ctx.restore();
     }
 
     // Face: eyes and mouth reflecting state

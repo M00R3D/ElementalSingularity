@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hair Shape Editor</title>
+  <style>
+    :root {
+      --bg: #081019;
+      --panel: #0f1b2b;
+      --line: #2f4e76;
+      --accent: #57a7ff;
+      --text: #d8e8ff;
+      --muted: #8fa9cc;
+      --danger: #a44646;
+      --ok: #2d8f57;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: radial-gradient(circle at top, #10203a 0%, #060c14 55%, #03070d 100%);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: 100%;
+      gap: 12px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .panel {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      overflow: auto;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      color: #cde5ff;
+      letter-spacing: 0.2px;
+    }
+
+    h2 {
+      margin: 14px 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .row label {
+      font-size: 12px;
+      color: #a9c3e8;
+    }
+
+    input, select, button, textarea {
+      background: #0c1624;
+      border: 1px solid #32527a;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+
+    input[type="color"] {
+      padding: 2px;
+      height: 30px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover {
+      border-color: #6eb5ff;
+      background: #112136;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .btn-ok { border-color: #3e8e65; background: #123022; }
+    .btn-danger { border-color: #8a4a4a; background: #2c1919; }
+
+    .hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .canvas-wrap {
+      background: linear-gradient(180deg, #0a1320, #050a12);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      width: min(900px, 100%);
+      height: min(900px, 100%);
+      max-height: calc(100vh - 40px);
+      aspect-ratio: 1 / 1;
+      display: block;
+      image-rendering: auto;
+      touch-action: none;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #9fcbff;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel">
+      <h1>Hair Shape Editor</h1>
+
+      <h2>Profile</h2>
+      <div class="row">
+        <label for="hair1Style">Hair 1 style</label>
+        <select id="hair1Style"></select>
+      </div>
+      <div class="row">
+        <label for="hair2Style">Hair 2 style</label>
+        <select id="hair2Style"></select>
+      </div>
+
+      <h2>Create Shape</h2>
+      <div class="row">
+        <label for="targetLayer">Target layer</label>
+        <select id="targetLayer">
+          <option value="hairBehindFace">Behind face layer</option>
+          <option value="hair1">Hair 1 (back/volume)</option>
+          <option value="hair2">Hair 2 (fringe/front)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="shapeType">Primitive</label>
+        <select id="shapeType">
+          <option value="circle">Circle</option>
+          <option value="rect">Square/Rect</option>
+          <option value="triangle">Triangle</option>
+          <option value="spiral">Spiral strand</option>
+          <option value="spike">Super sharp strand</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="shapeColor">Color</label>
+        <input id="shapeColor" type="color" value="#4b2e20" />
+      </div>
+
+      <div class="btn-row">
+        <button id="btnAdd">Add shape</button>
+        <button id="btnDuplicate">Duplicate selected</button>
+        <button id="btnDelete" class="btn-danger">Delete selected</button>
+      </div>
+      <div class="btn-row">
+        <button id="btnClearLayer" class="btn-danger">Clear layer</button>
+        <button id="btnClearAll" class="btn-danger">Clear all</button>
+      </div>
+
+      <h2>Selected Shape</h2>
+      <div class="row">
+        <label for="propX">X</label>
+        <input id="propX" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propY">Y</label>
+        <input id="propY" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propW">W</label>
+        <input id="propW" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propH">H</label>
+        <input id="propH" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propR">R / Detail</label>
+        <input id="propR" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propRot">Rotation deg</label>
+        <input id="propRot" type="number" step="1" />
+      </div>
+      <div class="row">
+        <label for="propColor">Color</label>
+        <input id="propColor" type="color" value="#4b2e20" />
+      </div>
+
+      <h2>Export / Import</h2>
+      <div class="btn-row">
+        <button id="btnExport" class="btn-ok">Export JSON</button>
+        <button id="btnImport">Import JSON</button>
+        <button id="btnCopy" class="btn-ok">Copy JSON</button>
+      </div>
+      <textarea id="io" placeholder="Exported JSON appears here..."></textarea>
+
+      <div id="status" class="status"></div>
+      <div class="hint">
+        - Click and drag shapes in canvas to move.
+        - Mouse wheel changes size (W/H or R).
+        - Keys: [ and ] rotate, Delete removes selected.
+        - Coordinates are normalized by head radius.
+        - New primitives: Spiral strand + Super sharp strand.
+      </div>
+    </aside>
+
+    <section class="canvas-wrap">
+      <canvas id="stage" width="1000" height="1000"></canvas>
+    </section>
+  </div>
+
+  <script>
+    const HAIR_STYLES = [
+      "none",
+      "anime_ahoge", "anime_twintails", "anime_bangs", "anime_straight", "anime_spiky",
+      "female_wavy", "female_curly", "female_braid", "female_bob", "female_half_up",
+      "medieval_knight", "medieval_maiden", "medieval_noble", "medieval_warrior", "medieval_peasant",
+      "ridiculous_poodle", "ridiculous_neon", "ridiculous_worm", "ridiculous_bubble", "ridiculous_afro"
+    ];
+
+    const state = {
+      hair1Style: "anime_straight",
+      hair2Style: "none",
+      hairBehindFace: [],
+      hair1: [],
+      hair2: [],
+      selectedLayer: "hair1",
+      selectedIndex: -1,
+      drag: null
+    };
+
+    const stage = document.getElementById("stage");
+    const ctx = stage.getContext("2d");
+    const center = { x: stage.width / 2, y: stage.height / 2 };
+    const headRadiusPx = 170;
+
+    const el = {
+      hair1Style: document.getElementById("hair1Style"),
+      hair2Style: document.getElementById("hair2Style"),
+      targetLayer: document.getElementById("targetLayer"),
+      shapeType: document.getElementById("shapeType"),
+      shapeColor: document.getElementById("shapeColor"),
+      btnAdd: document.getElementById("btnAdd"),
+      btnDuplicate: document.getElementById("btnDuplicate"),
+      btnDelete: document.getElementById("btnDelete"),
+      btnClearLayer: document.getElementById("btnClearLayer"),
+      btnClearAll: document.getElementById("btnClearAll"),
+      propX: document.getElementById("propX"),
+      propY: document.getElementById("propY"),
+      propW: document.getElementById("propW"),
+      propH: document.getElementById("propH"),
+      propR: document.getElementById("propR"),
+      propRot: document.getElementById("propRot"),
+      propColor: document.getElementById("propColor"),
+      btnExport: document.getElementById("btnExport"),
+      btnImport: document.getElementById("btnImport"),
+      btnCopy: document.getElementById("btnCopy"),
+      io: document.getElementById("io"),
+      status: document.getElementById("status")
+    };
+
+    function setStatus(text, danger = false) {
+      el.status.textContent = text;
+      el.status.style.color = danger ? "#ff9f9f" : "#9fcbff";
+    }
+
+    function populateStyles() {
+      for (const s of HAIR_STYLES) {
+        const o1 = document.createElement("option");
+        o1.value = s;
+        o1.textContent = s;
+        const o2 = document.createElement("option");
+        o2.value = s;
+        o2.textContent = s;
+        el.hair1Style.appendChild(o1);
+        el.hair2Style.appendChild(o2);
+      }
+      el.hair1Style.value = state.hair1Style;
+      el.hair2Style.value = state.hair2Style;
+    }
+
+    function worldToScreen(x, y) {
+      return { x: center.x + x * headRadiusPx, y: center.y + y * headRadiusPx };
+    }
+
+    function screenToWorld(x, y) {
+      return { x: (x - center.x) / headRadiusPx, y: (y - center.y) / headRadiusPx };
+    }
+
+    function currentShapes() {
+      return state[state.selectedLayer];
+    }
+
+    function selectedShape() {
+      const list = currentShapes();
+      if (state.selectedIndex < 0 || state.selectedIndex >= list.length) return null;
+      return list[state.selectedIndex];
+    }
+
+    function addShape() {
+      const type = el.shapeType.value;
+      const color = el.shapeColor.value;
+      const base = {
+        type,
+        x: 0,
+        y: -0.65,
+        w: 0.35,
+        h: 0.35,
+        r: 0.2,
+        rot: 0,
+        color
+      };
+
+      if (type === "spiral") {
+        base.w = 0.26;
+        base.h = 0.48;
+        base.r = 0.28; // controls turns and strand thickness
+      } else if (type === "spike") {
+        base.w = 0.2;
+        base.h = 0.62;
+        base.r = 0.86; // controls tip sharpness
+      }
+
+      if (state.selectedLayer === "hair2") {
+        base.y = -0.85;
+        if (type === "spiral") {
+          base.w = 0.2;
+          base.h = 0.42;
+          base.r = 0.26;
+        } else if (type === "spike") {
+          base.w = 0.15;
+          base.h = 0.54;
+          base.r = 0.92;
+        } else {
+          base.w = 0.22;
+          base.h = 0.5;
+          base.r = 0.14;
+        }
+      }
+
+      currentShapes().push(base);
+      state.selectedIndex = currentShapes().length - 1;
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function duplicateSelected() {
+      const shape = selectedShape();
+      if (!shape) return;
+      const copy = JSON.parse(JSON.stringify(shape));
+      copy.x += 0.08;
+      currentShapes().push(copy);
+      state.selectedIndex = currentShapes().length - 1;
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function deleteSelected() {
+      if (state.selectedIndex < 0) return;
+      currentShapes().splice(state.selectedIndex, 1);
+      state.selectedIndex = Math.min(state.selectedIndex, currentShapes().length - 1);
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function clearLayer() {
+      state[state.selectedLayer] = [];
+      state.selectedIndex = -1;
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function clearAll() {
+      state.hairBehindFace = [];
+      state.hair1 = [];
+      state.hair2 = [];
+      state.selectedIndex = -1;
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function syncPropsFromSelected() {
+      const s = selectedShape();
+      const empty = !s;
+      el.propX.value = empty ? "" : s.x;
+      el.propY.value = empty ? "" : s.y;
+      el.propW.value = empty ? "" : s.w;
+      el.propH.value = empty ? "" : s.h;
+      el.propR.value = empty ? "" : s.r;
+      el.propRot.value = empty ? "" : (s.rot || 0);
+      el.propColor.value = empty ? "#4b2e20" : (s.color || "#4b2e20");
+    }
+
+    function applyPropsToSelected() {
+      const s = selectedShape();
+      if (!s) return;
+      s.x = Number(el.propX.value || 0);
+      s.y = Number(el.propY.value || 0);
+      s.w = Math.max(0.01, Number(el.propW.value || 0.01));
+      s.h = Math.max(0.01, Number(el.propH.value || 0.01));
+      s.r = Math.max(0.01, Number(el.propR.value || 0.01));
+      s.rot = Number(el.propRot.value || 0);
+      s.color = el.propColor.value || "#4b2e20";
+      draw();
+    }
+
+    function drawGuideBase() {
+      ctx.clearRect(0, 0, stage.width, stage.height);
+
+      ctx.fillStyle = "#0a1323";
+      ctx.fillRect(0, 0, stage.width, stage.height);
+
+      for (let i = -5; i <= 5; i++) {
+        const v = center.x + i * (headRadiusPx * 0.2);
+        const h = center.y + i * (headRadiusPx * 0.2);
+        ctx.strokeStyle = i === 0 ? "rgba(120,170,220,0.45)" : "rgba(90,130,180,0.18)";
+        ctx.lineWidth = i === 0 ? 1.4 : 1;
+        ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, stage.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(stage.width, h); ctx.stroke();
+      }
+
+      ctx.fillStyle = "#9ec7ff";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText("Head guide (normalized coords)", 12, 20);
+    }
+
+    function drawGuideFace() {
+      ctx.fillStyle = "#ff8fab";
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, headRadiusPx * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, headRadiusPx * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#111";
+      ctx.beginPath(); ctx.arc(center.x - headRadiusPx * 0.2, center.y - headRadiusPx * 0.08, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(center.x + headRadiusPx * 0.2, center.y - headRadiusPx * 0.08, 6, 0, Math.PI * 2); ctx.fill();
+
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y + headRadiusPx * 0.06, headRadiusPx * 0.11, Math.PI * 0.12, Math.PI * 0.88);
+      ctx.stroke();
+    }
+
+    function drawShape(shape, selected) {
+      const p = worldToScreen(shape.x, shape.y);
+      const rot = (shape.rot || 0) * Math.PI / 180;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (rot) ctx.rotate(rot);
+      ctx.fillStyle = shape.color || "#4b2e20";
+      ctx.strokeStyle = selected ? "#ffe29a" : "rgba(10,16,26,0.9)";
+      ctx.lineWidth = selected ? 2.4 : 1.2;
+
+      if (shape.type === "circle") {
+        const r = Math.max(1, shape.r * headRadiusPx);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape.type === "rect") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+      } else if (shape.type === "triangle") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2);
+        ctx.lineTo(-w / 2, h / 2);
+        ctx.lineTo(w / 2, h / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape.type === "spiral") {
+        const maxRadius = Math.max(3, shape.w * headRadiusPx);
+        const stretch = Math.max(0.35, shape.h / Math.max(0.01, shape.w));
+        const turns = Math.max(1.1, (shape.r || 0.2) * 12);
+        const end = Math.PI * 2 * turns;
+        const steps = Math.max(44, Math.floor(turns * 36));
+        const strandWidth = Math.max(1.2, headRadiusPx * (0.008 + (shape.r || 0.2) * 0.045));
+
+        ctx.strokeStyle = shape.color || "#4b2e20";
+        ctx.lineWidth = strandWidth;
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const t = (i / steps) * end;
+          const progress = i / steps;
+          const rad = progress * maxRadius;
+          const px = Math.cos(t) * rad;
+          const py = Math.sin(t) * rad * stretch;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        if (selected) {
+          ctx.strokeStyle = "#ffe29a";
+          ctx.lineWidth = strandWidth + 1.4;
+          ctx.stroke();
+        }
+      } else if (shape.type === "spike") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+        const sharpness = Math.max(0.05, Math.min(1, Number(shape.r) || 0.9));
+        const tipHalf = Math.max(1.5, w * (0.03 + (1 - sharpness) * 0.2));
+        const neckHalf = Math.max(tipHalf + 1, w * 0.14);
+        const baseY = h * 0.5;
+
+        ctx.beginPath();
+        ctx.moveTo(-tipHalf, -h / 2);
+        ctx.lineTo(tipHalf, -h / 2);
+        ctx.lineTo(neckHalf, -h * 0.18);
+        ctx.lineTo(w * 0.5, baseY);
+        ctx.lineTo(0, h * 0.32);
+        ctx.lineTo(-w * 0.5, baseY);
+        ctx.lineTo(-neckHalf, -h * 0.18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function draw() {
+      drawGuideBase();
+
+      const behindShapes = state.hairBehindFace;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      for (let i = 0; i < behindShapes.length; i++) {
+        const selected = state.selectedLayer === "hairBehindFace" && i === state.selectedIndex;
+        drawShape(behindShapes[i], selected);
+      }
+      ctx.restore();
+
+      drawGuideFace();
+
+      const drawList = [
+        { key: "hair1", alpha: 0.93 },
+        { key: "hair2", alpha: 0.88 }
+      ];
+
+      for (const section of drawList) {
+        const shapes = state[section.key];
+        ctx.save();
+        ctx.globalAlpha = section.alpha;
+        for (let i = 0; i < shapes.length; i++) {
+          const selected = section.key === state.selectedLayer && i === state.selectedIndex;
+          drawShape(shapes[i], selected);
+        }
+        ctx.restore();
+      }
+
+      ctx.fillStyle = "#9ec7ff";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText(`Hair1 style: ${state.hair1Style}`, 12, stage.height - 28);
+      ctx.fillText(`Hair2 style: ${state.hair2Style}`, 12, stage.height - 12);
+    }
+
+    function hitShape(mouseX, mouseY) {
+      const world = screenToWorld(mouseX, mouseY);
+      const layers = ["hair2", "hair1", "hairBehindFace"];
+
+      for (const layer of layers) {
+        const list = state[layer];
+        for (let i = list.length - 1; i >= 0; i--) {
+          const s = list[i];
+          const dx = world.x - s.x;
+          const dy = world.y - s.y;
+          if (s.type === "circle") {
+            const r = s.r || 0.2;
+            if (dx * dx + dy * dy <= r * r) return { layer, index: i };
+          } else if (s.type === "spiral") {
+            const rw = s.w || 0.26;
+            const rh = Math.max(0.12, (s.h || 0.42) * 0.75);
+            if ((dx * dx) / (rw * rw) + (dy * dy) / (rh * rh) <= 1) {
+              return { layer, index: i };
+            }
+          } else {
+            const w = (s.w || 0.2) * 0.5;
+            const h = (s.h || 0.2) * 0.5;
+            if (Math.abs(dx) <= w && Math.abs(dy) <= h) return { layer, index: i };
+          }
+        }
+      }
+      return null;
+    }
+
+    function exportJson() {
+      const payload = {
+        version: 1,
+        hair1Style: state.hair1Style,
+        hair2Style: state.hair2Style,
+        hairBehindFace: state.hairBehindFace,
+        hair1: state.hair1,
+        hair2: state.hair2
+      };
+      el.io.value = JSON.stringify(payload, null, 2);
+      setStatus("JSON exported. You can copy and send it.");
+    }
+
+    function importJson() {
+      try {
+        const data = JSON.parse(el.io.value);
+        state.hair1Style = String(data.hair1Style || "anime_straight");
+        state.hair2Style = String(data.hair2Style || "none");
+        state.hairBehindFace = Array.isArray(data.hairBehindFace) ? data.hairBehindFace : [];
+        state.hair1 = Array.isArray(data.hair1) ? data.hair1 : [];
+        state.hair2 = Array.isArray(data.hair2) ? data.hair2 : [];
+        el.hair1Style.value = state.hair1Style;
+        el.hair2Style.value = state.hair2Style;
+        state.selectedIndex = -1;
+        syncPropsFromSelected();
+        draw();
+        setStatus("JSON imported successfully.");
+      } catch (error) {
+        setStatus("Invalid JSON. Check format.", true);
+      }
+    }
+
+    function copyJson() {
+      exportJson();
+      navigator.clipboard.writeText(el.io.value)
+        .then(() => setStatus("JSON copied to clipboard."))
+        .catch(() => setStatus("Could not copy automatically. Copy manually.", true));
+    }
+
+    function wireEvents() {
+      el.hair1Style.addEventListener("change", () => {
+        state.hair1Style = el.hair1Style.value;
+        draw();
+      });
+      el.hair2Style.addEventListener("change", () => {
+        state.hair2Style = el.hair2Style.value;
+        draw();
+      });
+      el.targetLayer.addEventListener("change", () => {
+        state.selectedLayer = el.targetLayer.value;
+        state.selectedIndex = Math.min(state.selectedIndex, currentShapes().length - 1);
+        syncPropsFromSelected();
+        draw();
+      });
+
+      el.btnAdd.addEventListener("click", addShape);
+      el.btnDuplicate.addEventListener("click", duplicateSelected);
+      el.btnDelete.addEventListener("click", deleteSelected);
+      el.btnClearLayer.addEventListener("click", clearLayer);
+      el.btnClearAll.addEventListener("click", clearAll);
+      el.btnExport.addEventListener("click", exportJson);
+      el.btnImport.addEventListener("click", importJson);
+      el.btnCopy.addEventListener("click", copyJson);
+
+      [el.propX, el.propY, el.propW, el.propH, el.propR, el.propRot, el.propColor].forEach((n) => {
+        n.addEventListener("input", applyPropsToSelected);
+      });
+
+      stage.addEventListener("pointerdown", (ev) => {
+        const rect = stage.getBoundingClientRect();
+        const mx = (ev.clientX - rect.left) * (stage.width / rect.width);
+        const my = (ev.clientY - rect.top) * (stage.height / rect.height);
+        const hit = hitShape(mx, my);
+        if (hit) {
+          state.selectedLayer = hit.layer;
+          el.targetLayer.value = hit.layer;
+          state.selectedIndex = hit.index;
+          syncPropsFromSelected();
+          const world = screenToWorld(mx, my);
+          const shape = selectedShape();
+          state.drag = { dx: world.x - shape.x, dy: world.y - shape.y };
+        } else {
+          state.selectedIndex = -1;
+          syncPropsFromSelected();
+        }
+        draw();
+      });
+
+      stage.addEventListener("pointermove", (ev) => {
+        if (!state.drag) return;
+        const s = selectedShape();
+        if (!s) return;
+        const rect = stage.getBoundingClientRect();
+        const mx = (ev.clientX - rect.left) * (stage.width / rect.width);
+        const my = (ev.clientY - rect.top) * (stage.height / rect.height);
+        const world = screenToWorld(mx, my);
+        s.x = world.x - state.drag.dx;
+        s.y = world.y - state.drag.dy;
+        syncPropsFromSelected();
+        draw();
+      });
+
+      stage.addEventListener("pointerup", () => { state.drag = null; });
+      stage.addEventListener("pointerleave", () => { state.drag = null; });
+
+      stage.addEventListener("wheel", (ev) => {
+        const s = selectedShape();
+        if (!s) return;
+        ev.preventDefault();
+        const delta = ev.deltaY < 0 ? 0.02 : -0.02;
+        if (s.type === "circle") {
+          s.r = Math.max(0.02, (s.r || 0.2) + delta);
+        } else {
+          s.w = Math.max(0.02, (s.w || 0.2) + delta);
+          s.h = Math.max(0.02, (s.h || 0.2) + delta);
+        }
+        syncPropsFromSelected();
+        draw();
+      }, { passive: false });
+
+      window.addEventListener("keydown", (ev) => {
+        const s = selectedShape();
+        if (!s) return;
+        if (ev.key === "Delete") {
+          deleteSelected();
+          ev.preventDefault();
+          return;
+        }
+        if (ev.key === "[") {
+          s.rot = (s.rot || 0) - 5;
+          syncPropsFromSelected();
+          draw();
+          ev.preventDefault();
+          return;
+        }
+        if (ev.key === "]") {
+          s.rot = (s.rot || 0) + 5;
+          syncPropsFromSelected();
+          draw();
+          ev.preventDefault();
+        }
+      });
+    }
+
+    function boot() {
+      populateStyles();
+      wireEvents();
+      draw();
+      setStatus("Ready. Design behind-face, Hair 1, Hair 2 and export JSON.");
+    }
+
+    boot();
+  </script>
+</body>
+</html>
