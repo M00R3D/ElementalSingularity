@@ -1,0 +1,1510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hair Shape Editor</title>
+  <style>
+    :root {
+      --bg: #081019;
+      --panel: #0f1b2b;
+      --line: #2f4e76;
+      --accent: #57a7ff;
+      --text: #d8e8ff;
+      --muted: #8fa9cc;
+      --danger: #a44646;
+      --ok: #2d8f57;
+    }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: radial-gradient(circle at top, #10203a 0%, #060c14 55%, #03070d 100%);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: 100%;
+      gap: 12px;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+
+    .panel {
+      background: color-mix(in srgb, var(--panel) 92%, black);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      overflow: auto;
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      color: #cde5ff;
+      letter-spacing: 0.2px;
+    }
+
+    h2 {
+      margin: 14px 0 8px;
+      font-size: 13px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .row label {
+      font-size: 12px;
+      color: #a9c3e8;
+    }
+
+    input, select, button, textarea {
+      background: #0c1624;
+      border: 1px solid #32527a;
+      color: var(--text);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+
+    input[type="color"] {
+      padding: 2px;
+      height: 30px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    button:hover {
+      border-color: #6eb5ff;
+      background: #112136;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .btn-ok { border-color: #3e8e65; background: #123022; }
+    .btn-danger { border-color: #8a4a4a; background: #2c1919; }
+
+    .hint {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .canvas-wrap {
+      background: linear-gradient(180deg, #0a1320, #050a12);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    canvas {
+      width: min(900px, 100%);
+      height: min(900px, 100%);
+      max-height: calc(100vh - 40px);
+      aspect-ratio: 1 / 1;
+      display: block;
+      image-rendering: auto;
+      touch-action: none;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .status {
+      font-size: 12px;
+      color: #9fcbff;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="panel">
+      <h1>Hair Shape Editor</h1>
+
+      <h2>Profile</h2>
+      <div class="row">
+        <label for="hair1Style">Hair 1 style</label>
+        <select id="hair1Style"></select>
+      </div>
+      <div class="row">
+        <label for="hair2Style">Hair 2 style</label>
+        <select id="hair2Style"></select>
+      </div>
+      <div class="row">
+        <label for="previewSize">Preview size</label>
+        <select id="previewSize">
+          <option value="12">12</option>
+          <option value="14">14</option>
+          <option value="15" selected>15</option>
+          <option value="17">17</option>
+          <option value="19">19</option>
+          <option value="21">21</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="previewFaceType">Face type</label>
+        <select id="previewFaceType">
+          <option value="friendly">friendly</option>
+          <option value="serious">serious</option>
+          <option value="grin">grin</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="previewEyeType">Eye type</label>
+        <select id="previewEyeType">
+          <option value="round">round</option>
+          <option value="sharp">sharp</option>
+          <option value="sleepy">sleepy</option>
+          <option value="big">big</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="previewBodyColor">Body color</label>
+        <input id="previewBodyColor" type="color" value="#ff7a59" />
+      </div>
+      <div class="row">
+        <label for="previewBackShell">Back shell</label>
+        <input id="previewBackShell" type="checkbox" checked />
+      </div>
+
+      <h2>Create Shape</h2>
+      <div class="row">
+        <label for="targetLayer">Target layer</label>
+        <select id="targetLayer">
+          <option value="hairBehindFace">Behind face layer</option>
+          <option value="hair1">Hair 1 (back/volume)</option>
+          <option value="hair2">Hair 2 (fringe/front)</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="shapeType">Primitive</label>
+        <select id="shapeType">
+          <option value="circle">Circle</option>
+          <option value="rect">Square/Rect</option>
+          <option value="triangle">Triangle</option>
+          <option value="spiral">Spiral strand</option>
+          <option value="spike">Super sharp strand</option>
+          <option value="crescent">Crescent (half-moon)</option>
+          <option value="leaf">Leaf / Blade</option>
+          <option value="curly">Curly (anime curls)</option>
+          <option value="anime1">Anime strand S-shaped</option>
+          <option value="anime2">Anime spiky (upward)</option>
+          <option value="anime3">Anime ribbon (soft)</option>
+          <option value="anime4">Anime semi-realistic</option>
+        </select>
+      </div>
+      <div class="row">
+        <label for="shapeColor">Color</label>
+        <input id="shapeColor" type="color" value="#4b2e20" />
+      </div>
+
+      <div class="btn-row">
+        <button id="btnAdd">Add shape</button>
+        <button id="btnDuplicate">Duplicate selected</button>
+        <button id="btnDelete" class="btn-danger">Delete selected</button>
+      </div>
+      <div class="btn-row">
+        <button id="btnClearLayer" class="btn-danger">Clear layer</button>
+        <button id="btnClearAll" class="btn-danger">Clear all</button>
+      </div>
+
+      <h2>Selected Shape</h2>
+      <div class="row">
+        <label for="propX">X</label>
+        <input id="propX" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propY">Y</label>
+        <input id="propY" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propW">W</label>
+        <input id="propW" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propH">H</label>
+        <input id="propH" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propR">R / Detail</label>
+        <input id="propR" type="number" step="0.01" />
+      </div>
+      <div class="row">
+        <label for="propRot">Rotation deg</label>
+        <input id="propRot" type="number" step="1" />
+      </div>
+      <div class="row">
+        <label for="propGroupRot">Group rotate</label>
+        <input id="propGroupRot" type="number" step="1" />
+      </div>
+      <div class="row">
+        <label for="propScaleX">Scale X</label>
+        <input id="propScaleX" type="number" step="0.01" value="1" />
+      </div>
+      <div class="row">
+        <label for="propScaleY">Scale Y</label>
+        <input id="propScaleY" type="number" step="0.01" value="1" />
+      </div>
+      <div class="btn-row">
+        <button id="btnApplyTransform">Apply transform</button>
+        <button id="btnClearSelection" class="btn-danger">Clear selection</button>
+      </div>
+      <div class="row">
+        <label for="propColor">Color</label>
+        <input id="propColor" type="color" value="#4b2e20" />
+      </div>
+
+      <h2>Export / Import</h2>
+      <div class="btn-row">
+        <button id="btnExport" class="btn-ok">Export JSON</button>
+        <button id="btnImport">Import JSON</button>
+        <button id="btnCopy" class="btn-ok">Copy JSON</button>
+        <button id="btnInsertFancy" class="btn-ok">Insert fancy_anime</button>
+        <button id="btnInsertSpiky" class="btn-ok">Insert special_spiky</button>
+      </div>
+      <textarea id="io" placeholder="Exported JSON appears here..."></textarea>
+
+      <div id="status" class="status"></div>
+      <div class="hint">
+        - Click and drag shapes in canvas to move.
+        - Mouse wheel changes size (W/H or R).
+        - Keys: [ and ] rotate, Delete removes selected.
+        - Coordinates are normalized by head radius.
+        - New primitives: Spiral strand, Super sharp strand, Crescent, Leaf, Curly (anime).
+      </div>
+    </aside>
+
+    <section class="canvas-wrap">
+      <canvas id="stage" width="1000" height="1000"></canvas>
+    </section>
+  </div>
+
+  <script>
+    const HAIR_STYLES = [
+      "none",
+      "anime_ahoge", "anime_twintails", "anime_bangs", "anime_straight", "anime_spiky",
+      "female_wavy", "female_curly", "female_braid", "female_bob", "female_half_up",
+      "medieval_knight", "medieval_maiden", "medieval_noble", "medieval_warrior", "medieval_peasant",
+      "ridiculous_poodle", "ridiculous_neon", "ridiculous_worm", "ridiculous_bubble", "ridiculous_afro",
+      "fancy_anime",
+      "special_spiky"
+    ];
+
+    const state = {
+      hair1Style: "anime_straight",
+      hair2Style: "none",
+      previewSize: 15,
+      previewFaceType: "friendly",
+      previewEyeType: "round",
+      previewBodyColor: "#ff7a59",
+      previewBackShell: false,
+      hairBehindFace: [],
+      hair1: [],
+      hair2: [],
+      selectedLayer: "hair1",
+      selectedIndex: -1,
+      drag: null
+    };
+
+    const PRESET_FANCY_ANIME = {
+      version: 1,
+      hair1Style: 'fancy_anime',
+      hair2Style: 'fancy_anime',
+      hairBehindFace: [
+        { type: 'circle', x: -0.24, y: -0.09, r: 0.6 },
+        { type: 'circle', x: 0.25, y: -0.09, r: 0.6 },
+        { type: 'circle', x: 0.00, y: -0.48, r: 0.46 },
+        { type: 'anime2', x: -0.58, y: 0.26, w: 0.57, h: 0.66, rot: -27 },
+        { type: 'anime2', x: 0.47, y: 0.24, w: 0.45, h: 0.33, rot: 101 },
+        { type: 'anime2', x: 0.46, y: 0.36, w: 0.24, h: 0.66, rot: 141 }
+      ],
+      hair1: [
+        { type: 'circle', x: -0.01, y: -0.63, r: 0.26 },
+        { type: 'anime3', x: -0.53, y: 0.11, w: 0.52, h: 1.24, rot: 0 },
+        { type: 'anime3', x: -0.67, y: 0.13, w: 0.56, h: 1.28, rot: 13 },
+        { type: 'anime4', x: 0.57, y: 0.05, w: 0.40, h: 0.98, rot: -34 },
+        { type: 'anime3', x: 0.72, y: 0.05, w: 0.56, h: 1.28, rot: -37 },
+        { type: 'anime3', x: 0.96, y: 0.13, w: 0.89, h: 1.28, rot: -46 },
+        { type: 'anime3', x: -0.29, y: -0.16, w: 0.18, h: 0.90, rot: 0 },
+        { type: 'anime3', x: -0.28, y: -0.29, w: 1.56, h: 0.90, rot: 0 },
+        { type: 'anime3', x: 0.63, y: -0.41, w: 1.56, h: 0.90, rot: -83 },
+        { type: 'leaf', x: 0.37, y: -0.53, w: 0.54, h: 0.56 },
+        { type: 'leaf', x: 0.57, y: -0.35, w: 0.54, h: 0.56 },
+        { type: 'leaf', x: 0.61, y: 0.05, w: 0.54, h: 0.56 },
+        { type: 'leaf', x: -0.37, y: -0.48, w: 0.54, h: 0.56 },
+        { type: 'leaf', x: -0.57, y: -0.30, w: 0.54, h: 0.56 }
+      ],
+      hair2: [
+        { type: 'anime3', x: -0.19, y: -0.32, w: 0.14, h: 0.70 },
+        { type: 'anime3', x: 0.23, y: -0.32, w: 0.14, h: 0.70, rot: -13 }
+      ]
+    };
+
+    const PRESET_SPECIAL_SPIKY = {
+      version: 1,
+      hair1Style: "special_spiky",
+      hair2Style: "special_spiky",
+      hairBehindFace: [
+        {
+          type: "circle",
+          x: 0,
+          y: -0.38093333136806706,
+          w: 0.35,
+          h: 0.35,
+          r: 0.5800000000000003,
+          rot: 0,
+          color: "#4b2e20"
+        },
+        {
+          type: "circle",
+          x: 0.4186529463352946,
+          y: -0.1907310640806984,
+          w: 0.35,
+          h: 0.35,
+          r: 0.5800000000000003,
+          rot: 0,
+          color: "#4b2e20"
+        },
+        {
+          type: "circle",
+          x: -0.36421592882384424,
+          y: -0.1814528767314336,
+          w: 0.35,
+          h: 0.35,
+          r: 0.5800000000000003,
+          rot: 0,
+          color: "#4b2e20"
+        }
+      ],
+      hair1: [
+        { type: "triangle", x: -0.009277932517015934, y: -1.0025700043809742, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.2, rot: 0, color: "#4b2e20" },
+        { type: "triangle", x: 0.2423678963637609, y: -0.960818288725407, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.3, rot: 22, color: "#4b2e20" },
+        { type: "triangle", x: 0.5311264746415971, y: -0.7845333024619355, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.3, rot: 22, color: "#4b2e20" },
+        { type: "triangle", x: 0.7874117794453797, y: -0.6546390618206014, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.3, rot: 39, color: "#4b2e20" },
+        { type: "triangle", x: -0.2632916577615537, y: -0.9515401332301733, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.2, rot: -26, color: "#4b2e20" },
+        { type: "triangle", x: -0.5173056378383403, y: -0.7706160532920694, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.2, rot: -26, color: "#4b2e20" },
+        { type: "triangle", x: -0.7898757377814076, y: -0.6360827189761029, w: 0.16999999999999996, h: 0.16999999999999996, r: 0.2, rot: -45, color: "#4b2e20" },
+        { type: "triangle", x: -0.700500978795378, y: -0.7613379296508668, w: 0.18, h: 0.35, r: 0.2, rot: -37, color: "#4b2e20" },
+        { type: "triangle", x: 0.7294715854550436, y: -0.7938114579571692, w: 0.18, h: 0.35, r: 0.2, rot: 30, color: "#4b2e20" }
+      ],
+      hair2: [
+        { type: "triangle", x: -0.004639221090756845, y: -0.4974299637649948, w: 0.22, h: 0.5, r: 0.14, rot: 180, color: "#4b2e20" },
+        { type: "triangle", x: 0.14958602287111278, y: -0.46495637175063015, w: 0.22, h: 0.5, r: 0.14, rot: 195, color: "#4b2e20" },
+        { type: "triangle", x: -0.14154045177048424, y: -0.46031727807599776, w: 0.22, h: 0.5, r: 0.14, rot: 161, color: "#4b2e20" },
+        { type: "triangle", x: -0.6321473173406525, y: 0.10565049381953816, w: 0.22, h: 0.5, r: 0.14, rot: 161, color: "#4b2e20" },
+        { type: "triangle", x: 0.6354570957137592, y: 0.11956764742731094, w: 0.22, h: 0.5, r: 0.14, rot: 191, color: "#4b2e20" }
+      ]
+    };
+
+    const STYLE_PRESETS = {
+      fancy_anime: PRESET_FANCY_ANIME,
+      special_spiky: PRESET_SPECIAL_SPIKY
+    };
+
+    // Generate a simple default preset for styles that don't have a detailed preset.
+    function generateDefaultPreset(styleValue) {
+      const preset = { version: 1, hair1Style: styleValue, hair2Style: styleValue, hairBehindFace: [], hair1: [], hair2: [] };
+
+      if (styleValue.startsWith('anime_') || styleValue.startsWith('fancy') || styleValue.startsWith('special')) {
+        // anime-like: ribbons + small fringe
+        preset.hairBehindFace.push({ type: 'circle', x: -0.18, y: -0.15, r: 0.48 });
+        preset.hairBehindFace.push({ type: 'circle', x: 0.22, y: -0.15, r: 0.48 });
+        preset.hair1.push({ type: 'anime3', x: -0.45, y: 0.05, w: 0.42, h: 1.0, rot: -8 });
+        preset.hair1.push({ type: 'anime3', x: 0.50, y: 0.02, w: 0.42, h: 1.05, rot: 6 });
+        preset.hair2.push({ type: 'anime3', x: -0.12, y: -0.28, w: 0.14, h: 0.6 });
+        preset.hair2.push({ type: 'anime3', x: 0.16, y: -0.28, w: 0.14, h: 0.6 });
+        return preset;
+      }
+
+      if (styleValue.startsWith('female_')) {
+        // softer shapes, leaves and gentle ribbons
+        preset.hairBehindFace.push({ type: 'circle', x: 0, y: -0.36, r: 0.46 });
+        preset.hair1.push({ type: 'leaf', x: -0.38, y: -0.22, w: 0.46, h: 0.7 });
+        preset.hair1.push({ type: 'leaf', x: 0.42, y: -0.18, w: 0.46, h: 0.7 });
+        preset.hair2.push({ type: 'anime3', x: -0.12, y: -0.34, w: 0.12, h: 0.5 });
+        return preset;
+      }
+
+      if (styleValue.startsWith('medieval_')) {
+        // structured shapes, triangles and volume
+        preset.hairBehindFace.push({ type: 'circle', x: 0, y: -0.42, r: 0.5 });
+        preset.hair1.push({ type: 'triangle', x: -0.26, y: -0.86, w: 0.22, h: 0.36, rot: -20 });
+        preset.hair1.push({ type: 'triangle', x: 0.32, y: -0.82, w: 0.22, h: 0.36, rot: 18 });
+        preset.hair2.push({ type: 'rect', x: 0, y: -0.34, w: 0.18, h: 0.34 });
+        return preset;
+      }
+
+      if (styleValue.startsWith('ridiculous_')) {
+        // silly: many bubbles
+        preset.hairBehindFace.push({ type: 'circle', x: -0.36, y: -0.2, r: 0.42 });
+        preset.hairBehindFace.push({ type: 'circle', x: 0.38, y: -0.18, r: 0.42 });
+        preset.hair1.push({ type: 'circle', x: -0.08, y: -0.9, r: 0.22 });
+        preset.hair1.push({ type: 'circle', x: 0.42, y: -0.7, r: 0.18 });
+        preset.hair1.push({ type: 'circle', x: -0.62, y: -0.72, r: 0.16 });
+        return preset;
+      }
+
+      // fallback: minimal default (small shell + two strands)
+      preset.hairBehindFace.push({ type: 'circle', x: 0, y: -0.38, r: 0.44 });
+      preset.hair1.push({ type: 'anime3', x: -0.36, y: 0.0, w: 0.38, h: 0.9 });
+      preset.hair1.push({ type: 'anime3', x: 0.36, y: 0.0, w: 0.38, h: 0.9 });
+      return preset;
+    }
+
+    const stage = document.getElementById("stage");
+    const ctx = stage.getContext("2d");
+    let center = { x: stage.width / 2, y: stage.height / 2 };
+    let baseHeadRadiusPx = 170;
+    let headRadiusPx = 170;
+    let DPR = window.devicePixelRatio || 1;
+
+    function updateHeadRadiusFromSize() {
+      const sizeScale = Math.max(0.6, Math.min(1.5, Number(state.previewSize || 15) / 15));
+      headRadiusPx = baseHeadRadiusPx * sizeScale;
+    }
+
+    function updateViewport() {
+      DPR = window.devicePixelRatio || 1;
+      const rect = stage.getBoundingClientRect();
+      // set backing store size for crisp rendering
+      stage.width = Math.max(100, Math.round(rect.width * DPR));
+      stage.height = Math.max(100, Math.round(rect.height * DPR));
+      // reset transform and scale to DPR so drawing uses CSS pixels
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(DPR, DPR);
+      center = { x: rect.width / 2, y: rect.height / 2 };
+      baseHeadRadiusPx = Math.min(rect.width, rect.height) * 0.34; // responsive base radius
+      updateHeadRadiusFromSize();
+    }
+    window.addEventListener('resize', () => { updateViewport(); draw(); });
+    // also update on DPR change (some browsers fire resize, safe to call periodically)
+    setInterval(() => { if ((window.devicePixelRatio||1) !== DPR) { updateViewport(); draw(); } }, 1000);
+    updateViewport();
+
+    const el = {
+      hair1Style: document.getElementById("hair1Style"),
+      hair2Style: document.getElementById("hair2Style"),
+      previewSize: document.getElementById("previewSize"),
+      previewFaceType: document.getElementById("previewFaceType"),
+      previewEyeType: document.getElementById("previewEyeType"),
+      previewBodyColor: document.getElementById("previewBodyColor"),
+      previewBackShell: document.getElementById("previewBackShell"),
+      targetLayer: document.getElementById("targetLayer"),
+      shapeType: document.getElementById("shapeType"),
+      shapeColor: document.getElementById("shapeColor"),
+      btnAdd: document.getElementById("btnAdd"),
+      btnDuplicate: document.getElementById("btnDuplicate"),
+      btnDelete: document.getElementById("btnDelete"),
+      btnClearLayer: document.getElementById("btnClearLayer"),
+      btnClearAll: document.getElementById("btnClearAll"),
+      propX: document.getElementById("propX"),
+      propY: document.getElementById("propY"),
+      propW: document.getElementById("propW"),
+      propH: document.getElementById("propH"),
+      propR: document.getElementById("propR"),
+      propRot: document.getElementById("propRot"),
+      propGroupRot: document.getElementById("propGroupRot"),
+      propScaleX: document.getElementById("propScaleX"),
+      propScaleY: document.getElementById("propScaleY"),
+      btnApplyTransform: document.getElementById("btnApplyTransform"),
+      btnClearSelection: document.getElementById("btnClearSelection"),
+      propColor: document.getElementById("propColor"),
+      btnExport: document.getElementById("btnExport"),
+      btnImport: document.getElementById("btnImport"),
+      btnCopy: document.getElementById("btnCopy"),
+      btnInsertFancy: document.getElementById("btnInsertFancy"),
+      btnInsertSpiky: document.getElementById("btnInsertSpiky"),
+      io: document.getElementById("io"),
+      status: document.getElementById("status")
+    };
+
+    function setStatus(text, danger = false) {
+      el.status.textContent = text;
+      el.status.style.color = danger ? "#ff9f9f" : "#9fcbff";
+    }
+
+    function populateStyles() {
+      // clear any existing options (prevents duplicates from static markup)
+      el.hair1Style.innerHTML = '';
+      el.hair2Style.innerHTML = '';
+      for (const s of HAIR_STYLES) {
+        const o1 = document.createElement("option");
+        o1.value = s;
+        o1.textContent = s;
+        const o2 = document.createElement("option");
+        o2.value = s;
+        o2.textContent = s;
+        el.hair1Style.appendChild(o1);
+        el.hair2Style.appendChild(o2);
+      }
+      el.hair1Style.value = state.hair1Style;
+      el.hair2Style.value = state.hair2Style;
+      el.previewSize.value = String(state.previewSize);
+      el.previewFaceType.value = state.previewFaceType;
+      el.previewEyeType.value = state.previewEyeType;
+      el.previewBodyColor.value = state.previewBodyColor;
+      el.previewBackShell.checked = !!state.previewBackShell;
+
+      // If the current selection corresponds to a preset, apply it immediately
+      if (STYLE_PRESETS[el.hair1Style.value]) applyPresetForStyle(el.hair1Style.value, 'hair1Style');
+      if (STYLE_PRESETS[el.hair2Style.value]) applyPresetForStyle(el.hair2Style.value, 'hair2Style');
+    }
+
+    function worldToScreen(x, y) {
+      return { x: center.x + x * headRadiusPx, y: center.y + y * headRadiusPx };
+    }
+
+    function screenToWorld(x, y) {
+      return { x: (x - center.x) / headRadiusPx, y: (y - center.y) / headRadiusPx };
+    }
+
+    function currentShapes() {
+      return state[state.selectedLayer];
+    }
+
+    // support multi-selection within the active layer
+    if (!state.selectedIndices) state.selectedIndices = [];
+
+    function selectedShape() {
+      const list = currentShapes();
+      if (!list) return null;
+      if (state.selectedIndex < 0 || state.selectedIndex >= list.length) return null;
+      return list[state.selectedIndex] || null;
+    }
+
+    function addShape() {
+      const type = el.shapeType.value;
+      const color = el.shapeColor.value;
+      const base = {
+        type,
+        x: 0,
+        y: -0.65,
+        w: 0.35,
+        h: 0.35,
+        r: 0.2,
+        rot: 0,
+        color
+      };
+
+      if (type === "spiral") {
+        base.w = 0.26;
+        base.h = 0.48;
+        base.r = 0.28; // controls turns and strand thickness
+      } else if (type === "spike") {
+        base.w = 0.2;
+        base.h = 0.62;
+        base.r = 0.86; // controls tip sharpness
+      } else if (type === "crescent") {
+        base.w = 0.36;
+        base.h = 0.36;
+        base.r = 0.28; // how thin the crescent cut is
+        base.y = -0.6;
+      } else if (type === "leaf") {
+        base.w = 0.28;
+        base.h = 0.56;
+        base.r = 0.2; // vein thickness modifier
+        base.y = -0.6;
+      } else if (type === "curly") {
+        base.w = 0.18;
+        base.h = 0.56;
+        base.r = 0.36; // curl tightness
+        base.y = -0.8;
+      } else if (type === "anime1") {
+        // S-shaped anime strand (cel-shaded)
+        base.w = 0.22;
+        base.h = 0.72;
+        base.r = 0.28; // controls thickness taper and internal lines
+        base.y = -0.78;
+      } else if (type === "anime2") {
+        // Spiky anime upward strand
+        base.w = 0.24;
+        base.h = 0.66;
+        base.r = 0.92; // sharpness
+        base.y = -0.76;
+      } else if (type === "anime3") {
+        // Soft ribbon
+        base.w = 0.18;
+        base.h = 0.9;
+        base.r = 0.16; // smoothness
+        base.y = -0.9;
+      } else if (type === "anime4") {
+        // Semi-realistic anime strand
+        base.w = 0.26;
+        base.h = 0.84;
+        base.r = 0.36; // strand divisions
+        base.y = -0.78;
+      }
+
+      if (state.selectedLayer === "hair2") {
+        base.y = -0.85;
+        if (type === "spiral") {
+          base.w = 0.2;
+          base.h = 0.42;
+          base.r = 0.26;
+        } else if (type === "spike") {
+          base.w = 0.15;
+          base.h = 0.54;
+          base.r = 0.92;
+        } else if (type === "anime1") {
+          base.w = 0.16; base.h = 0.52; base.r = 0.22; base.y = -0.9;
+        } else if (type === "anime2") {
+          base.w = 0.14; base.h = 0.54; base.r = 0.96; base.y = -0.86;
+        } else if (type === "anime3") {
+          base.w = 0.14; base.h = 0.7; base.r = 0.12; base.y = -0.95;
+        } else if (type === "anime4") {
+          base.w = 0.18; base.h = 0.64; base.r = 0.28; base.y = -0.9;
+        } else {
+          base.w = 0.22;
+          base.h = 0.5;
+          base.r = 0.14;
+        }
+      }
+
+      currentShapes().push(base);
+      state.selectedIndex = currentShapes().length - 1;
+      state.selectedIndices = [state.selectedIndex];
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function duplicateSelected() {
+      const shape = selectedShape();
+      if (!shape) return;
+      const copy = JSON.parse(JSON.stringify(shape));
+      copy.x += 0.08;
+      currentShapes().push(copy);
+      state.selectedIndex = currentShapes().length - 1;
+      state.selectedIndices = [state.selectedIndex];
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function deleteSelected() {
+      if (state.selectedIndex < 0) return;
+      currentShapes().splice(state.selectedIndex, 1);
+      state.selectedIndex = Math.min(state.selectedIndex, currentShapes().length - 1);
+      state.selectedIndices = state.selectedIndex >= 0 ? [state.selectedIndex] : [];
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function clearLayer() {
+      state[state.selectedLayer] = [];
+      state.selectedIndex = -1;
+      state.selectedIndices = [];
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function clearAll() {
+      state.hairBehindFace = [];
+      state.hair1 = [];
+      state.hair2 = [];
+      state.selectedIndex = -1;
+      state.selectedIndices = [];
+      syncPropsFromSelected();
+      draw();
+    }
+
+    function syncPropsFromSelected() {
+      const s = selectedShape();
+      const empty = !s;
+      el.propX.value = empty ? "" : s.x;
+      el.propY.value = empty ? "" : s.y;
+      el.propW.value = empty ? "" : s.w;
+      el.propH.value = empty ? "" : s.h;
+      el.propR.value = empty ? "" : s.r;
+      el.propRot.value = empty ? "" : (s.rot || 0);
+      el.propGroupRot.value = empty ? "" : (s.rot || 0);
+      el.propScaleX.value = empty ? 1 : 1;
+      el.propScaleY.value = empty ? 1 : 1;
+      el.propColor.value = empty ? "#4b2e20" : (s.color || "#4b2e20");
+    }
+
+    function applyPropsToSelected() {
+      // apply to all selected indices in the current layer
+      const list = currentShapes();
+      if (!list || !list.length) return;
+      const indices = state.selectedIndices && state.selectedIndices.length ? state.selectedIndices : (state.selectedIndex>=0 ? [state.selectedIndex] : []);
+      if (!indices.length) return;
+      for (const idx of indices) {
+        const s = list[idx];
+        if (!s) continue;
+        s.x = Number(el.propX.value || s.x);
+        s.y = Number(el.propY.value || s.y);
+        s.w = Math.max(0.01, Number(el.propW.value || s.w));
+        s.h = Math.max(0.01, Number(el.propH.value || s.h));
+        s.r = Math.max(0.01, Number(el.propR.value || s.r));
+        s.rot = Number(el.propRot.value || s.rot);
+        s.color = el.propColor.value || s.color;
+      }
+      draw();
+    }
+
+    function applyGroupTransform() {
+      const list = currentShapes();
+      const indices = state.selectedIndices && state.selectedIndices.length ? state.selectedIndices : (state.selectedIndex>=0 ? [state.selectedIndex] : []);
+      if (!indices.length) return;
+      const rot = Number(el.propGroupRot.value || 0);
+      const sx = Number(el.propScaleX.value || 1);
+      const sy = Number(el.propScaleY.value || 1);
+      for (const idx of indices) {
+        const s = list[idx]; if (!s) continue;
+        // apply rotation around own pivot
+        s.rot = (s.rot || 0) + rot;
+        // scale width/height by factors
+        s.w = Math.max(0.01, s.w * sx);
+        s.h = Math.max(0.01, s.h * sy);
+      }
+      // reset group controls to defaults
+      el.propGroupRot.value = 0; el.propScaleX.value = 1; el.propScaleY.value = 1;
+      draw();
+    }
+
+    function drawGuideBase() {
+      // reset any transforms to avoid cumulative translate/rotate bugs
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      // ensure correct scale for DPR
+      ctx.scale(DPR, DPR);
+      const rect = stage.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+
+      ctx.fillStyle = "#0a1323";
+      ctx.fillRect(0, 0, rect.width, rect.height);
+      for (let i = -5; i <= 5; i++) {
+        const v = center.x + i * (headRadiusPx * 0.2);
+        const h = center.y + i * (headRadiusPx * 0.2);
+        ctx.strokeStyle = i === 0 ? "rgba(120,170,220,0.45)" : "rgba(90,130,180,0.18)";
+        ctx.lineWidth = i === 0 ? 1.4 : 1;
+        ctx.beginPath(); ctx.moveTo(v, 0); ctx.lineTo(v, rect.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(rect.width, h); ctx.stroke();
+      }
+
+      ctx.fillStyle = "#9ec7ff";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText("Head guide (normalized coords)", 12, 20);
+    }
+
+    function drawGuideFace() {
+      // Use the same normalization radius as shape coordinates (1.0 = headRadiusPx)
+      // Visual face radius is slightly smaller to better match in-game creator proportions.
+      const faceR = headRadiusPx * 0.86;
+      ctx.fillStyle = state.previewBodyColor || "#ff7a59";
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, faceR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,255,255,0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, faceR, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#111";
+      const eyeOffset = faceR * 0.4;
+      if (state.previewEyeType === 'sharp') {
+        ctx.beginPath(); ctx.ellipse(center.x - eyeOffset, center.y - faceR * 0.08, faceR * 0.07, faceR * 0.03, -0.28, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(center.x + eyeOffset, center.y - faceR * 0.08, faceR * 0.07, faceR * 0.03, 0.28, 0, Math.PI * 2); ctx.fill();
+      } else if (state.previewEyeType === 'sleepy') {
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = Math.max(1.4, faceR * 0.035);
+        ctx.beginPath(); ctx.moveTo(center.x - eyeOffset - faceR * 0.06, center.y - faceR * 0.08); ctx.lineTo(center.x - eyeOffset + faceR * 0.06, center.y - faceR * 0.08); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(center.x + eyeOffset - faceR * 0.06, center.y - faceR * 0.08); ctx.lineTo(center.x + eyeOffset + faceR * 0.06, center.y - faceR * 0.08); ctx.stroke();
+      } else if (state.previewEyeType === 'big') {
+        const eyeR = Math.max(3.2, faceR * 0.06);
+        ctx.beginPath(); ctx.arc(center.x - eyeOffset, center.y - faceR * 0.08, eyeR, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(center.x + eyeOffset, center.y - faceR * 0.08, eyeR, 0, Math.PI * 2); ctx.fill();
+      } else {
+        const eyeR = Math.max(2.2, faceR * 0.04);
+        ctx.beginPath(); ctx.arc(center.x - eyeOffset, center.y - faceR * 0.08, eyeR, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(center.x + eyeOffset, center.y - faceR * 0.08, eyeR, 0, Math.PI * 2); ctx.fill();
+      }
+
+      ctx.strokeStyle = "#111";
+      ctx.lineWidth = Math.max(1.5, faceR * 0.03);
+      ctx.beginPath();
+      if (state.previewFaceType === 'serious') {
+        ctx.moveTo(center.x - faceR * 0.22, center.y + faceR * 0.17);
+        ctx.lineTo(center.x + faceR * 0.22, center.y + faceR * 0.17);
+      } else if (state.previewFaceType === 'grin') {
+        ctx.arc(center.x, center.y + faceR * 0.1, faceR * 0.13, Math.PI * 0.12, Math.PI * 0.88);
+      } else {
+        ctx.arc(center.x, center.y + faceR * 0.1, faceR * 0.11, Math.PI * 0.1, Math.PI * 0.9);
+      }
+      ctx.stroke();
+    }
+
+    function drawPreviewBackShell() {
+      if (!state.previewBackShell || state.hair1Style === 'none') return;
+      const drawRadius = headRadiusPx;
+      const sx = center.x;
+      const sy = center.y;
+      // Approximate runtime back shell from PlayerController/CharacterSelectMenu (no sway in editor)
+      ctx.save();
+      ctx.fillStyle = (state.hair1[0] && state.hair1[0].color) || (state.hairBehindFace[0] && state.hairBehindFace[0].color) || '#4b2e20';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy - drawRadius * 0.42, drawRadius * 1.05, drawRadius * 0.96, 0, Math.PI * 0.86, Math.PI * 2.14);
+      ctx.fill();
+      ctx.fillRect(sx - drawRadius * 0.9, sy - drawRadius * 0.38, drawRadius * 0.28, drawRadius * 0.9);
+      ctx.fillRect(sx + drawRadius * 0.62, sy - drawRadius * 0.38, drawRadius * 0.28, drawRadius * 0.9);
+      for (let i = 0; i < 3; i++) {
+        const spread = i - 1;
+        const strandX = sx + spread * drawRadius * 0.36;
+        const strandTop = sy + drawRadius * 0.42;
+        const strandLen = drawRadius * (0.62 + Math.abs(spread) * 0.18);
+        const strandW = drawRadius * 0.22;
+        ctx.beginPath();
+        ctx.moveTo(strandX - strandW * 0.45, strandTop);
+        ctx.quadraticCurveTo(strandX - strandW * 0.3, strandTop + strandLen * 0.55, strandX, strandTop + strandLen);
+        ctx.quadraticCurveTo(strandX + strandW * 0.3, strandTop + strandLen * 0.55, strandX + strandW * 0.45, strandTop);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawShape(shape, selected) {
+      const p = worldToScreen(shape.x, shape.y);
+      const rot = (shape.rot || 0) * Math.PI / 180;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      if (rot) ctx.rotate(rot);
+      ctx.fillStyle = shape.color || "#4b2e20";
+      ctx.strokeStyle = selected ? "#ffe29a" : "rgba(10,16,26,0.9)";
+      ctx.lineWidth = selected ? 2.4 : 1.2;
+
+      if (shape.type === "circle") {
+        const r = Math.max(1, shape.r * headRadiusPx);
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape.type === "rect") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+        ctx.strokeRect(-w / 2, -h / 2, w, h);
+      } else if (shape.type === "triangle") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2);
+        ctx.lineTo(-w / 2, h / 2);
+        ctx.lineTo(w / 2, h / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape.type === "spiral") {
+        const maxRadius = Math.max(3, shape.w * headRadiusPx);
+        const stretch = Math.max(0.35, shape.h / Math.max(0.01, shape.w));
+        const turns = Math.max(1.1, (shape.r || 0.2) * 12);
+        const end = Math.PI * 2 * turns;
+        const steps = Math.max(44, Math.floor(turns * 36));
+        const strandWidth = Math.max(1.2, headRadiusPx * (0.008 + (shape.r || 0.2) * 0.045));
+
+        ctx.strokeStyle = shape.color || "#4b2e20";
+        ctx.lineWidth = strandWidth;
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const t = (i / steps) * end;
+          const progress = i / steps;
+          const rad = progress * maxRadius;
+          const px = Math.cos(t) * rad;
+          const py = Math.sin(t) * rad * stretch;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        if (selected) {
+          ctx.strokeStyle = "#ffe29a";
+          ctx.lineWidth = strandWidth + 1.4;
+          ctx.stroke();
+        }
+      } else if (shape.type === "spike") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+        const sharpness = Math.max(0.05, Math.min(1, Number(shape.r) || 0.9));
+        const tipHalf = Math.max(1.5, w * (0.03 + (1 - sharpness) * 0.2));
+        const neckHalf = Math.max(tipHalf + 1, w * 0.14);
+        const baseY = h * 0.5;
+
+        ctx.beginPath();
+        ctx.moveTo(-tipHalf, -h / 2);
+        ctx.lineTo(tipHalf, -h / 2);
+        ctx.lineTo(neckHalf, -h * 0.18);
+        ctx.lineTo(w * 0.5, baseY);
+        ctx.lineTo(0, h * 0.32);
+        ctx.lineTo(-w * 0.5, baseY);
+        ctx.lineTo(-neckHalf, -h * 0.18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape.type === "crescent") {
+        const outerR = Math.max(3, shape.w * headRadiusPx);
+        const innerR = Math.max(1, outerR * Math.max(0.18, 1 - (shape.r || 0.3)));
+        const offset = (shape.r || 0.28) * outerR * 0.6;
+
+        ctx.beginPath();
+        // outer circle (slightly offset for nicer orientation)
+        ctx.arc(-outerR * 0.12, 0, outerR, 0, Math.PI * 2);
+        // inner circle (cut out, drawn anticlockwise to form crescent)
+        ctx.arc(-outerR * 0.12 + offset, 0, innerR, 0, Math.PI * 2, true);
+        try { ctx.fill('evenodd'); } catch (e) { ctx.fill(); }
+        ctx.stroke();
+      } else if (shape.type === "leaf") {
+        const w = Math.max(2, shape.w * headRadiusPx);
+        const h = Math.max(2, shape.h * headRadiusPx);
+
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2);
+        ctx.quadraticCurveTo(w * 0.6, -h * 0.08, 0, h / 2);
+        ctx.quadraticCurveTo(-w * 0.6, -h * 0.08, 0, -h / 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // central vein
+        ctx.strokeStyle = 'rgba(0,0,0,0.28)';
+        ctx.lineWidth = Math.max(1, headRadiusPx * 0.006 * (shape.r || 0.2));
+        ctx.beginPath();
+        ctx.moveTo(0, -h / 2 + 2);
+        ctx.lineTo(0, h / 2 - 2);
+        ctx.stroke();
+        // reset stroke for other shapes
+        ctx.strokeStyle = selected ? "#ffe29a" : "rgba(10,16,26,0.9)";
+        ctx.lineWidth = selected ? 2.4 : 1.2;
+      } else if (shape.type === "curly") {
+        const maxAmp = Math.max(2, shape.w * headRadiusPx * 0.45);
+        const length = Math.max(6, shape.h * headRadiusPx);
+        const turns = Math.max(2, Math.floor((shape.r || 0.36) * 8));
+        const steps = Math.max(28, turns * 18);
+        const strandWidth = Math.max(1, headRadiusPx * 0.012 + (shape.r || 0.36) * 0.8);
+
+        ctx.strokeStyle = shape.color || "#4b2e20";
+        ctx.lineWidth = strandWidth;
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const t = i / steps;
+          const px = Math.sin(t * Math.PI * 2 * turns) * (maxAmp * (0.5 + 0.5 * (1 - t)));
+          const py = -length / 2 + t * length;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        // small curled tip
+        const tipX = Math.sin(1 * Math.PI * 2 * turns) * (maxAmp * 0.3);
+        const tipY = -length / 2 + length;
+        const curlR = Math.max(3, headRadiusPx * 0.03 + (shape.r || 0.36) * 6);
+        ctx.beginPath();
+        ctx.arc(tipX, tipY, curlR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape.type === "anime1") {
+        // Smooth S-shaped strand with cel shading and internal flow lines
+        const w = Math.max(6, shape.w * headRadiusPx);
+        const h = Math.max(12, shape.h * headRadiusPx);
+        const taper = Math.max(0.08, 1 - (shape.r || 0.28) * 0.6);
+
+        // main shape via two cubic curves forming an S
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.45, h * 0.5);
+        ctx.bezierCurveTo(-w * 0.6, h * 0.15, -w * 0.1, -h * 0.05, w * 0.05, -h * 0.45);
+        ctx.bezierCurveTo(w * 0.2, -h * 0.6, w * 0.45, -h * 0.7, w * 0.7 * taper, -h * 0.85);
+        ctx.lineTo(w * 0.58 * taper, -h * 0.85 + 4);
+        ctx.bezierCurveTo(w * 0.35 * taper, -h * 0.6, w * 0.05 * taper, -h * 0.4, -w * 0.25 * taper, h * 0.25);
+        ctx.closePath();
+        ctx.fillStyle = shape.color || '#4b2e20';
+        ctx.fill();
+        ctx.strokeStyle = selected ? '#fff0b8' : 'rgba(6,8,12,0.9)';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+
+        // cel-shade block (flat darker polygon)
+        ctx.fillStyle = shadeColor(shape.color || '#4b2e20', -0.18);
+        ctx.beginPath();
+        ctx.moveTo(w * 0.05, -h * 0.45);
+        ctx.quadraticCurveTo(w * 0.22, -h * 0.25, w * 0.12, -h * 0.05);
+        ctx.lineTo(w * 0.02, h * 0.05);
+        ctx.closePath();
+        ctx.fill();
+
+        // internal subtle flow lines
+        ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(-w * 0.2, h * 0.2); ctx.quadraticCurveTo(0, h * 0.05, w * 0.08, -h * 0.3); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-w * 0.05, h * 0.05); ctx.quadraticCurveTo(w * 0.08, -h * 0.05, w * 0.18, -h * 0.45); ctx.stroke();
+      } else if (shape.type === "anime2") {
+        // Spiky anime upward strand with bold internal cuts
+        const baseW = Math.max(6, shape.w * headRadiusPx);
+        const h = Math.max(12, shape.h * headRadiusPx);
+        const spikes = 3;
+        const pts = [];
+        // construct upward spikes
+        pts.push({ x: -baseW * 0.5, y: h * 0.5 });
+        for (let i = 0; i <= spikes; i++) {
+          const t = i / spikes;
+          const x = -baseW * 0.5 + t * baseW;
+          const y = h * 0.5 - Math.pow(t, 1.2) * h * 1.05;
+          pts.push({ x, y });
+        }
+        pts.push({ x: baseW * 0.5, y: h * 0.5 });
+
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+        ctx.fillStyle = shape.color || '#2e3a56';
+        ctx.fill();
+        ctx.strokeStyle = selected ? '#fff4b0' : '#111316';
+        ctx.lineWidth = 1.8;
+        ctx.stroke();
+
+        // bold internal cuts - thick dark strokes cut into shape
+        ctx.strokeStyle = shadeColor(shape.color || '#2e3a56', -0.32);
+        ctx.lineWidth = 3.0;
+        ctx.beginPath();
+        ctx.moveTo(-baseW * 0.12, h * 0.1);
+        ctx.lineTo(baseW * 0.08, -h * 0.05);
+        ctx.moveTo(-baseW * 0.02, h * 0.25);
+        ctx.lineTo(baseW * 0.18, -h * 0.2);
+        ctx.stroke();
+
+        // highlight edges (thin)
+        ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pts[1].x, pts[1].y); for (let i=2;i<pts.length-1;i++) ctx.lineTo(pts[i].x, pts[i].y); ctx.stroke();
+      } else if (shape.type === "anime3") {
+        // Soft ribbon with gentle gradient
+        const w = Math.max(6, shape.w * headRadiusPx);
+        const h = Math.max(20, shape.h * headRadiusPx);
+        // main path
+        const grad = ctx.createLinearGradient(-w*0.2, -h/2, w*0.2, h/2);
+        const base = shape.color || '#3b2a20';
+        grad.addColorStop(0, shadeColor(base, 0.14));
+        grad.addColorStop(0.6, base);
+        grad.addColorStop(1, shadeColor(base, -0.08));
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(-w*0.4, h*0.5);
+        ctx.quadraticCurveTo(-w*0.2, h*0.1, 0, -h*0.4);
+        ctx.quadraticCurveTo(w*0.12, -h*0.6, w*0.28, -h*0.7);
+        ctx.quadraticCurveTo(w*0.02, -h*0.5, -w*0.18, -h*0.2);
+        ctx.closePath();
+        ctx.fill();
+
+        // thin soft outline
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1.0; ctx.stroke();
+      } else if (shape.type === "anime4") {
+        // Semi-realistic anime strand with layered shading and highlights
+        const w = Math.max(8, shape.w * headRadiusPx);
+        const h = Math.max(24, shape.h * headRadiusPx);
+        const base = shape.color || '#3b2a20';
+
+        // main irregular silhouette
+        ctx.beginPath();
+        ctx.moveTo(-w*0.45, h*0.45);
+        ctx.bezierCurveTo(-w*0.35, h*0.1, -w*0.05, -h*0.05, w*0.08, -h*0.5);
+        ctx.bezierCurveTo(w*0.18, -h*0.65, w*0.42, -h*0.78, w*0.6, -h*0.9);
+        ctx.lineTo(w*0.48, -h*0.9 + 6);
+        ctx.bezierCurveTo(w*0.28, -h*0.6, w*0.06, -h*0.3, -w*0.2, h*0.25);
+        ctx.closePath();
+        ctx.fillStyle = base; ctx.fill();
+
+        // layered darker shadow
+        ctx.fillStyle = shadeColor(base, -0.16);
+        ctx.beginPath(); ctx.moveTo(0, -h*0.2); ctx.quadraticCurveTo(w*0.22, -h*0.18, w*0.26, -h*0.42); ctx.lineTo(w*0.18, -h*0.42); ctx.closePath(); ctx.fill();
+
+        // subtle highlight stripe
+        ctx.strokeStyle = shadeColor(base, 0.36); ctx.lineWidth = Math.max(1, headRadiusPx*0.008);
+        ctx.beginPath(); ctx.moveTo(-w*0.18, h*0.06); ctx.quadraticCurveTo(0, -h*0.02, w*0.12, -h*0.24); ctx.stroke();
+
+        // internal strand divisions (thin lines)
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 0.8;
+        for (let i=0;i<3;i++){
+          const t = (i+1)/4;
+          ctx.beginPath(); ctx.moveTo(-w*0.35*(1-t), h*0.35*(1-t)); ctx.quadraticCurveTo(-w*0.05*(1-t), -h*0.03, w*0.08*t, -h*(0.25 + 0.18*t)); ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function draw() {
+      drawGuideBase();
+      const rect = stage.getBoundingClientRect();
+
+      // Match in-game layering order:
+      // back shell + hair behind face + hair layer 1 -> face -> hair layer 2 (front fringe)
+      drawPreviewBackShell();
+
+      const behindShapes = state.hairBehindFace;
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      for (let i = 0; i < behindShapes.length; i++) {
+          const selected = state.selectedLayer === "hairBehindFace" && i === state.selectedIndex;
+          if (behindShapes[i]) drawShape(behindShapes[i], selected);
+      }
+      ctx.restore();
+
+      const hair1Shapes = state.hair1;
+      ctx.save();
+      ctx.globalAlpha = 0.93;
+      for (let i = 0; i < hair1Shapes.length; i++) {
+          const selected = state.selectedLayer === "hair1" && i === state.selectedIndex;
+          if (hair1Shapes[i]) drawShape(hair1Shapes[i], selected);
+      }
+      ctx.restore();
+
+      drawGuideFace();
+
+      const hair2Shapes = state.hair2;
+      ctx.save();
+      ctx.globalAlpha = 0.88;
+      for (let i = 0; i < hair2Shapes.length; i++) {
+          const selected = state.selectedLayer === "hair2" && i === state.selectedIndex;
+          if (hair2Shapes[i]) drawShape(hair2Shapes[i], selected);
+      }
+      ctx.restore();
+
+      ctx.fillStyle = "#9ec7ff";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText(`Hair1 style: ${state.hair1Style}`, 12, rect.height - 28);
+      ctx.fillText(`Hair2 style: ${state.hair2Style}`, 12, rect.height - 12);
+    }
+
+    // --- Helpers ---
+    function shadeColor(hex, percent) {
+      // simple shade by percent (-1..1)
+      try {
+        const c = hex.replace('#','');
+        const num = parseInt(c.length===3? c.split('').map(ch=>ch+ch).join('') : c, 16);
+        let r = (num >> 16) + Math.round(255 * percent);
+        let g = ((num >> 8) & 0x00FF) + Math.round(255 * percent);
+        let b = (num & 0x0000FF) + Math.round(255 * percent);
+        r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+        return `rgb(${r},${g},${b})`;
+      } catch (e) { return hex; }
+    }
+
+    function hitShape(mouseX, mouseY) {
+      const world = screenToWorld(mouseX, mouseY);
+      const layers = ["hair2", "hair1", "hairBehindFace"];
+
+      for (const layer of layers) {
+        const list = state[layer];
+        for (let i = list.length - 1; i >= 0; i--) {
+          const s = list[i];
+          if (!s) continue;
+          const dx = world.x - s.x;
+          const dy = world.y - s.y;
+          if (s.type === "circle") {
+            const r = s.r || 0.2;
+            if (dx * dx + dy * dy <= r * r) return { layer, index: i };
+          } else if (s.type === "spiral") {
+            const rw = s.w || 0.26;
+            const rh = Math.max(0.12, (s.h || 0.42) * 0.75);
+            if ((dx * dx) / (rw * rw) + (dy * dy) / (rh * rh) <= 1) {
+              return { layer, index: i };
+            }
+          } else {
+            const w = (s.w || 0.2) * 0.5;
+            const h = (s.h || 0.2) * 0.5;
+            if (Math.abs(dx) <= w && Math.abs(dy) <= h) return { layer, index: i };
+          }
+        }
+      }
+      return null;
+    }
+
+    function exportJson() {
+      const payload = {
+        version: 1,
+        hair1Style: state.hair1Style,
+        hair2Style: state.hair2Style,
+        hairBehindFace: state.hairBehindFace,
+        hair1: state.hair1,
+        hair2: state.hair2
+      };
+      el.io.value = JSON.stringify(payload, null, 2);
+      setStatus("JSON exported. You can copy and send it.");
+    }
+
+    function importJson() {
+      try {
+        const data = JSON.parse(el.io.value);
+        state.hair1Style = String(data.hair1Style || "anime_straight");
+        state.hair2Style = String(data.hair2Style || "none");
+        state.hairBehindFace = Array.isArray(data.hairBehindFace) ? data.hairBehindFace : [];
+        state.hair1 = Array.isArray(data.hair1) ? data.hair1 : [];
+        state.hair2 = Array.isArray(data.hair2) ? data.hair2 : [];
+        el.hair1Style.value = state.hair1Style;
+        el.hair2Style.value = state.hair2Style;
+        state.selectedIndex = -1;
+        syncPropsFromSelected();
+        draw();
+        setStatus("JSON imported successfully.");
+      } catch (error) {
+        setStatus("Invalid JSON. Check format.", true);
+      }
+    }
+
+    function cloneShapes(list) {
+      return Array.isArray(list) ? JSON.parse(JSON.stringify(list)) : [];
+    }
+
+    function applyPresetForStyle(styleValue, targetSelectId) {
+      let preset = STYLE_PRESETS[styleValue];
+      const isExplicitPreset = !!preset;
+      if (!preset) {
+        // generate a simple preset for the style category
+        preset = generateDefaultPreset(styleValue);
+        // do not store globally, just apply
+      }
+
+      if (targetSelectId === "hair1Style") {
+        state.hair1Style = styleValue;
+        state.hairBehindFace = cloneShapes(preset.hairBehindFace);
+        state.hair1 = cloneShapes(preset.hair1);
+        // Keep front layer in sync for explicit presets so preview matches in-game selection.
+        if (isExplicitPreset) {
+          state.hair2Style = styleValue;
+          state.hair2 = cloneShapes(preset.hair2);
+          el.hair2Style.value = state.hair2Style;
+        }
+      } else if (targetSelectId === "hair2Style") {
+        state.hair2Style = styleValue;
+        state.hair2 = cloneShapes(preset.hair2);
+      } else {
+        return false;
+      }
+
+      state.selectedLayer = targetSelectId === "hair2Style" ? "hair2" : "hair1";
+      el.targetLayer.value = state.selectedLayer;
+      state.selectedIndex = -1;
+      state.selectedIndices = [];
+      // Back shell is a helper overlay. Disable it when a preset provides real geometry
+      // so the selected style is visible without a dominant fixed silhouette.
+      const hasAnyPresetShapes =
+        (Array.isArray(preset.hairBehindFace) && preset.hairBehindFace.length > 0) ||
+        (Array.isArray(preset.hair1) && preset.hair1.length > 0) ||
+        (Array.isArray(preset.hair2) && preset.hair2.length > 0);
+      if (hasAnyPresetShapes) {
+        state.previewBackShell = false;
+        el.previewBackShell.checked = false;
+      }
+      syncPropsFromSelected();
+      // expose preset JSON in IO textarea so user can see or export it
+      try { el.io.value = JSON.stringify(preset, null, 2); } catch (e) { /* ignore */ }
+      // also update selects to reflect any styles defined in the preset
+      if (preset.hair1Style) { state.hair1Style = String(preset.hair1Style); el.hair1Style.value = state.hair1Style; }
+      if (preset.hair2Style) { state.hair2Style = String(preset.hair2Style); el.hair2Style.value = state.hair2Style; }
+      draw();
+      setStatus(`Preset '${styleValue}' loaded in ${targetSelectId === "hair2Style" ? "Hair 2" : "Hair 1"}.`);
+      return true;
+    }
+
+    function copyJson() {
+      exportJson();
+      navigator.clipboard.writeText(el.io.value)
+        .then(() => setStatus("JSON copied to clipboard."))
+        .catch(() => setStatus("Could not copy automatically. Copy manually.", true));
+    }
+
+    function wireEvents() {
+      el.previewSize.addEventListener('change', () => {
+        state.previewSize = Math.max(12, Math.min(21, Number(el.previewSize.value || 15)));
+        updateHeadRadiusFromSize();
+        draw();
+      });
+      el.previewFaceType.addEventListener('change', () => {
+        state.previewFaceType = el.previewFaceType.value || 'friendly';
+        draw();
+      });
+      el.previewEyeType.addEventListener('change', () => {
+        state.previewEyeType = el.previewEyeType.value || 'round';
+        draw();
+      });
+      el.previewBodyColor.addEventListener('input', () => {
+        state.previewBodyColor = el.previewBodyColor.value || '#ff7a59';
+        draw();
+      });
+      el.previewBackShell.addEventListener('change', () => {
+        state.previewBackShell = !!el.previewBackShell.checked;
+        draw();
+      });
+
+      el.hair1Style.addEventListener("change", () => {
+        state.hair1Style = el.hair1Style.value;
+        if (applyPresetForStyle(state.hair1Style, "hair1Style")) return;
+        draw();
+      });
+      el.hair2Style.addEventListener("change", () => {
+        state.hair2Style = el.hair2Style.value;
+        if (applyPresetForStyle(state.hair2Style, "hair2Style")) return;
+        draw();
+      });
+      el.targetLayer.addEventListener("change", () => {
+        state.selectedLayer = el.targetLayer.value;
+        state.selectedIndex = Math.min(state.selectedIndex, currentShapes().length - 1);
+        state.selectedIndices = state.selectedIndex >= 0 ? [state.selectedIndex] : [];
+        syncPropsFromSelected();
+        draw();
+      });
+
+      el.btnAdd.addEventListener("click", addShape);
+      el.btnDuplicate.addEventListener("click", duplicateSelected);
+      el.btnDelete.addEventListener("click", deleteSelected);
+      el.btnClearLayer.addEventListener("click", clearLayer);
+      el.btnClearAll.addEventListener("click", clearAll);
+      el.btnExport.addEventListener("click", exportJson);
+      el.btnImport.addEventListener("click", importJson);
+      el.btnCopy.addEventListener("click", copyJson);
+      el.btnInsertFancy.addEventListener("click", () => {
+        try {
+          el.io.value = JSON.stringify(PRESET_FANCY_ANIME, null, 2);
+          importJson();
+          setStatus('Preset fancy_anime inserted and imported.');
+        } catch (e) { setStatus('Could not insert preset.', true); }
+      });
+      el.btnInsertSpiky.addEventListener("click", () => {
+        try {
+          el.io.value = JSON.stringify(PRESET_SPECIAL_SPIKY, null, 2);
+          importJson();
+          setStatus('Preset special_spiky inserted and imported.');
+        } catch (e) { setStatus('Could not insert preset.', true); }
+      });
+      el.btnApplyTransform.addEventListener('click', applyGroupTransform);
+      el.btnClearSelection.addEventListener('click', () => { state.selectedIndices = []; state.selectedIndex = -1; syncPropsFromSelected(); draw(); });
+
+      [el.propX, el.propY, el.propW, el.propH, el.propR, el.propRot, el.propColor].forEach((n) => {
+        n.addEventListener("input", applyPropsToSelected);
+      });
+
+      stage.addEventListener("pointerdown", (ev) => {
+        const rect = stage.getBoundingClientRect();
+        // use CSS pixel coordinates (not backing-store pixels)
+        const mx = (ev.clientX - rect.left);
+        const my = (ev.clientY - rect.top);
+        const hit = hitShape(mx, my);
+        if (hit) {
+          state.selectedLayer = hit.layer;
+          el.targetLayer.value = hit.layer;
+          // single-selection only: always select the clicked item
+          state.selectedIndices = [hit.index];
+          state.selectedIndex = hit.index;
+          syncPropsFromSelected();
+          const world = screenToWorld(mx, my);
+          const shape = selectedShape();
+          if (shape) state.drag = { dx: world.x - shape.x, dy: world.y - shape.y };
+          else state.drag = null;
+        } else {
+          state.selectedIndex = -1;
+          state.selectedIndices = [];
+          syncPropsFromSelected();
+        }
+        draw();
+      });
+
+      stage.addEventListener("pointermove", (ev) => {
+        if (!state.drag) return;
+        const s = selectedShape();
+        if (!s) return;
+        const rect = stage.getBoundingClientRect();
+        // compute CSS pixel coords, then world coords
+        const mx = (ev.clientX - rect.left);
+        const my = (ev.clientY - rect.top);
+        const world = screenToWorld(mx, my);
+        s.x = world.x - state.drag.dx;
+        s.y = world.y - state.drag.dy;
+        syncPropsFromSelected();
+        draw();
+      });
+
+      stage.addEventListener("pointerup", () => { state.drag = null; });
+      stage.addEventListener("pointerleave", () => { state.drag = null; });
+
+      stage.addEventListener("wheel", (ev) => {
+        const s = selectedShape();
+        if (!s) return;
+        ev.preventDefault();
+        const delta = ev.deltaY < 0 ? 0.02 : -0.02;
+        if (s.type === "circle") {
+          s.r = Math.max(0.02, (s.r || 0.2) + delta);
+        } else {
+          s.w = Math.max(0.02, (s.w || 0.2) + delta);
+          s.h = Math.max(0.02, (s.h || 0.2) + delta);
+        }
+        syncPropsFromSelected();
+        draw();
+      }, { passive: false });
+
+      window.addEventListener("keydown", (ev) => {
+        const s = selectedShape();
+        if (!s) return;
+        if (ev.key === "Delete") {
+          deleteSelected();
+          ev.preventDefault();
+          return;
+        }
+        if (ev.key === "[") {
+          s.rot = (s.rot || 0) - 5;
+          syncPropsFromSelected();
+          draw();
+          ev.preventDefault();
+          return;
+        }
+        if (ev.key === "]") {
+          s.rot = (s.rot || 0) + 5;
+          syncPropsFromSelected();
+          draw();
+          ev.preventDefault();
+        }
+      });
+    }
+
+    function boot() {
+      populateStyles();
+      // sync UI with state
+      el.targetLayer.value = state.selectedLayer;
+      wireEvents();
+      draw();
+      setStatus("Ready. Design behind-face, Hair 1, Hair 2 and export JSON.");
+    }
+
+    boot();
+  </script>
+</body>
+</html>
