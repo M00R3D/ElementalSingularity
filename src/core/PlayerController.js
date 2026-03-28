@@ -316,6 +316,38 @@ export class PlayerController {
   }
 
   _drawHairFrontFringe(ctx, sx, sy, drawRadius, hairStyle, swayIntensity, limbPhase) {
+    if (hairStyle === 'special_spiky') {
+      const R = drawRadius * 1.45;
+      const baseY = sy - drawRadius * 0.12;
+      const spikes = [
+        { x: -0.004639221090756845, y: -0.4974299637649948, w: 0.22, h: 0.5, rot: 180 },
+        { x: 0.14958602287111278, y: -0.46495637175063015, w: 0.22, h: 0.5, rot: 195 },
+        { x: -0.14154045177048424, y: -0.46031727807599776, w: 0.22, h: 0.5, rot: 161 },
+        { x: -0.6321473173406525, y: 0.10565049381953816, w: 0.22, h: 0.5, rot: 161 },
+        { x: 0.6354570957137592, y: 0.11956764742731094, w: 0.22, h: 0.5, rot: 191 }
+      ];
+      for (let i = 0; i < spikes.length; i++) {
+        const s = spikes[i];
+        const sway = Math.sin(limbPhase * 1.3 + i * 0.45) * R * 0.06 * swayIntensity;
+        const px = sx + s.x * R + sway;
+        const py = baseY + s.y * R;
+        const rot = (s.rot || 0) * Math.PI / 180;
+        const w = Math.max(2.6, s.w * R);
+        const h = Math.max(4, s.h * R);
+        ctx.save();
+        ctx.translate(px, py);
+        if (rot) ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.5, h * 0.5);
+        ctx.lineTo(0, -h * 0.5);
+        ctx.lineTo(w * 0.5, h * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      return;
+    }
+
     const style = String(hairStyle || 'none').replace(/^(anime_|female_|medieval_|ridiculous_)/, '');
     const profileMap = {
       ahoge: { count: 2, width: 0.16, depth: 0.44, offset: 0.18 },
@@ -337,7 +369,8 @@ export class PlayerController {
       neon: { count: 5, width: 0.12, depth: 0.5, offset: 0.2 },
       worm: { count: 4, width: 0.1, depth: 0.56, offset: 0.18 },
       bubble: { count: 3, width: 0.2, depth: 0.45, offset: 0.22 },
-      afro: { count: 3, width: 0.22, depth: 0.46, offset: 0.2 }
+      afro: { count: 3, width: 0.22, depth: 0.46, offset: 0.2 },
+      fancy_anime: { count: 2, width: 0.14, depth: 0.7, offset: 0.22 }
     };
     const profile = profileMap[style] || { count: 3, width: 0.18, depth: 0.52, offset: 0.22 };
     const topY = sy - drawRadius * 0.96;
@@ -637,6 +670,156 @@ export class PlayerController {
           ctx.arc(cx, cy, drawRadius * 0.28, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
+    } else if (hairStyle === 'fancy_anime') {
+      // Use a shading helper local to this method to emulate editor shadeColor
+      const shadeColor = (hex, percent) => {
+        try {
+          const c = hex.replace('#','');
+          const full = c.length === 3 ? c.split('').map(ch => ch+ch).join('') : c;
+          const num = parseInt(full, 16);
+          let r = (num >> 16) + Math.round(255 * percent);
+          let g = ((num >> 8) & 0x00FF) + Math.round(255 * percent);
+          let b = (num & 0x0000FF) + Math.round(255 * percent);
+          r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+          return `rgb(${r},${g},${b})`;
+        } catch (e) { return hex; }
+      };
+
+      const baseColor = ctx.fillStyle || '#4b2e20';
+      const shapes = [
+        {t:'c',x:-0.24,y:-0.09,r:0.6},
+        {t:'c',x:0.25,y:-0.09,r:0.6},
+        {t:'c',x:0,y:-0.48,r:0.46},
+        {t:'s',x:-0.58,y:0.26,w:0.57,h:0.66,rot:-27},
+        {t:'s',x:0.47,y:0.24,w:0.45,h:0.33,rot:101},
+        {t:'s',x:0.46,y:0.36,w:0.24,h:0.66,rot:141},
+        {t:'c',x:-0.01,y:-0.63,r:0.26},
+        {t:'r',x:-0.53,y:0.11,w:0.52,h:1.24,rot:0},
+        {t:'r',x:-0.67,y:0.13,w:0.56,h:1.28,rot:13},
+        {t:'a',x:0.57,y:0.05,w:0.4,h:0.98,rot:-34},
+        {t:'r',x:0.72,y:0.05,w:0.56,h:1.28,rot:-37},
+        {t:'r',x:0.96,y:0.13,w:0.89,h:1.28,rot:-46},
+        {t:'r',x:-0.29,y:-0.16,w:0.18,h:0.9,rot:0},
+        {t:'r',x:-0.28,y:-0.29,w:1.56,h:0.9,rot:0},
+        {t:'r',x:0.63,y:-0.41,w:1.56,h:0.9,rot:-83},
+        {t:'l',x:0.37,y:-0.53,w:0.54,h:0.56},
+        {t:'l',x:0.57,y:-0.35,w:0.54,h:0.56},
+        {t:'l',x:0.61,y:0.05,w:0.54,h:0.56},
+        {t:'l',x:-0.37,y:-0.48,w:0.54,h:0.56},
+        {t:'l',x:-0.57,y:-0.30,w:0.54,h:0.56}
+      ];
+      for (let i = 0; i < shapes.length; i++) {
+        const s = shapes[i];
+        const sway = Math.sin(limbPhase * 1.1 + i * 0.4) * drawRadius * 0.03 * swayIntensity;
+        const px = sx + s.x * drawRadius + sway;
+        const py = sy + s.y * drawRadius;
+        const rot = (s.rot || 0) * Math.PI / 180;
+        ctx.save();
+        ctx.translate(px, py);
+        if (rot) ctx.rotate(rot);
+        if (s.t === 'c') {
+          ctx.beginPath();
+          ctx.arc(0, 0, s.r * drawRadius, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (s.t === 's') {
+          const baseW = Math.max(6, s.w * drawRadius);
+          const h = Math.max(12, s.h * drawRadius);
+          const spikes = 3;
+          const pts = [];
+          pts.push({ x: -baseW * 0.5, y: h * 0.5 });
+          for (let j = 0; j <= spikes; j++) {
+            const t = j / spikes;
+            const xpt = -baseW * 0.5 + t * baseW;
+            const ypt = h * 0.5 - Math.pow(t, 1.2) * h * 1.05;
+            pts.push({ x: xpt, y: ypt });
+          }
+          pts.push({ x: baseW * 0.5, y: h * 0.5 });
+          ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y); ctx.closePath();
+          ctx.fillStyle = baseColor; ctx.fill();
+          ctx.strokeStyle = shadeColor(baseColor, -0.18); ctx.lineWidth = Math.max(1, drawRadius * 0.008); ctx.stroke();
+          // internal bold cuts
+          ctx.strokeStyle = shadeColor(baseColor, -0.32); ctx.lineWidth = Math.max(2, drawRadius * 0.02);
+          ctx.beginPath(); ctx.moveTo(-baseW * 0.12, h * 0.1); ctx.lineTo(baseW * 0.08, -h * 0.05); ctx.moveTo(-baseW * 0.02, h * 0.25); ctx.lineTo(baseW * 0.18, -h * 0.2); ctx.stroke();
+        } else if (s.t === 'r') {
+          const w = s.w * drawRadius, h = s.h * drawRadius;
+          const grad = ctx.createLinearGradient(-w*0.2, -h/2, w*0.2, h/2);
+          grad.addColorStop(0, shadeColor(baseColor, 0.14));
+          grad.addColorStop(0.6, baseColor);
+          grad.addColorStop(1, shadeColor(baseColor, -0.08));
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(-w * 0.4, h * 0.5);
+          ctx.quadraticCurveTo(-w * 0.2, h * 0.1, 0, -h * 0.4);
+          ctx.quadraticCurveTo(w * 0.12, -h * 0.6, w * 0.28, -h * 0.7);
+          ctx.quadraticCurveTo(w * 0.02, -h * 0.5, -w * 0.18, -h * 0.2);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = Math.max(1, drawRadius * 0.006); ctx.stroke();
+        } else if (s.t === 'a') {
+          const w = s.w * drawRadius, h = s.h * drawRadius;
+          ctx.beginPath(); ctx.moveTo(-w * 0.45, h * 0.45);
+          ctx.bezierCurveTo(-w * 0.35, h * 0.1, -w * 0.05, -h * 0.05, w * 0.08, -h * 0.5);
+          ctx.bezierCurveTo(w * 0.18, -h * 0.65, w * 0.42, -h * 0.78, w * 0.6, -h * 0.9);
+          ctx.lineTo(w * 0.48, -h * 0.85);
+          ctx.bezierCurveTo(w * 0.28, -h * 0.6, w * 0.06, -h * 0.3, -w * 0.2, h * 0.25);
+          ctx.closePath(); ctx.fillStyle = baseColor; ctx.fill();
+          ctx.fillStyle = shadeColor(baseColor, -0.16); ctx.beginPath(); ctx.moveTo(0, -h * 0.2); ctx.quadraticCurveTo(w * 0.22, -h * 0.18, w * 0.26, -h * 0.42); ctx.lineTo(w * 0.18, -h * 0.42); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = shadeColor(baseColor, 0.36); ctx.lineWidth = Math.max(1, drawRadius * 0.006); ctx.beginPath(); ctx.moveTo(-w * 0.18, h * 0.06); ctx.quadraticCurveTo(0, -h * 0.02, w * 0.12, -h * 0.24); ctx.stroke();
+        } else if (s.t === 'l') {
+          const w = s.w * drawRadius, h = s.h * drawRadius;
+          ctx.beginPath(); ctx.moveTo(0, -h / 2); ctx.quadraticCurveTo(w * 0.6, -h * 0.08, 0, h / 2); ctx.quadraticCurveTo(-w * 0.6, -h * 0.08, 0, -h / 2); ctx.closePath(); ctx.fillStyle = baseColor; ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = Math.max(1, drawRadius * 0.006); ctx.beginPath(); ctx.moveTo(0, -h / 2 + 2); ctx.lineTo(0, h / 2 - 2); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    } else if (hairStyle === 'special_spiky') {
+      // Layer 1 only: behind circles + top spikes.
+      const R = drawRadius * 1.32;
+      const baseY = sy - drawRadius * 0.16;
+      const behind = [
+        { x: 0, y: -0.38093333136806706, r: 0.5800000000000003 },
+        { x: 0.4186529463352946, y: -0.1907310640806984, r: 0.5800000000000003 },
+        { x: -0.36421592882384424, y: -0.1814528767314336, r: 0.5800000000000003 }
+      ];
+      for (let i = 0; i < behind.length; i++) {
+        const b = behind[i];
+        const sway = Math.sin(limbPhase * 1.15 + i * 0.6) * R * 0.08 * swayIntensity;
+        const px = sx + b.x * R + sway;
+        const py = baseY + b.y * R;
+        ctx.beginPath();
+        ctx.arc(px, py, Math.max(2.8, b.r * R), 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      const spikes = [
+        { x: -0.009277932517015934, y: -1.0025700043809742, w: 0.17, h: 0.17, rot: 0 },
+        { x: 0.2423678963637609, y: -0.960818288725407, w: 0.17, h: 0.17, rot: 22 },
+        { x: 0.5311264746415971, y: -0.7845333024619355, w: 0.17, h: 0.17, rot: 22 },
+        { x: 0.7874117794453797, y: -0.6546390618206014, w: 0.17, h: 0.17, rot: 39 },
+        { x: -0.2632916577615537, y: -0.9515401332301733, w: 0.17, h: 0.17, rot: -26 },
+        { x: -0.5173056378383403, y: -0.7706160532920694, w: 0.17, h: 0.17, rot: -26 },
+        { x: -0.7898757377814076, y: -0.6360827189761029, w: 0.17, h: 0.17, rot: -45 },
+        { x: -0.700500978795378, y: -0.7613379296508668, w: 0.18, h: 0.35, rot: -37 },
+        { x: 0.7294715854550436, y: -0.7938114579571692, w: 0.18, h: 0.35, rot: 30 }
+      ];
+      for (let i = 0; i < spikes.length; i++) {
+        const s = spikes[i];
+        const sway = Math.sin(limbPhase * 1.2 + i * 0.55) * R * 0.08 * swayIntensity;
+        const px = sx + s.x * R + sway;
+        const py = baseY + s.y * R;
+        const rot = (s.rot || 0) * Math.PI / 180;
+        const w = Math.max(2.5, s.w * R);
+        const h = Math.max(2.5, s.h * R);
+        ctx.save();
+        ctx.translate(px, py);
+        if (rot) ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.moveTo(0, -h * 0.5);
+        ctx.lineTo(-w * 0.5, h * 0.5);
+        ctx.lineTo(w * 0.5, h * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
       }
     }
   }

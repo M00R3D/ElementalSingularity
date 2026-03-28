@@ -30,7 +30,10 @@ export class CharacterSelectMenu {
       // Medieval (5)
       'medieval_knight', 'medieval_maiden', 'medieval_noble', 'medieval_warrior', 'medieval_peasant',
       // Ridiculous (5)
-      'ridiculous_poodle', 'ridiculous_neon', 'ridiculous_worm', 'ridiculous_bubble', 'ridiculous_afro'
+      'ridiculous_poodle', 'ridiculous_neon', 'ridiculous_worm', 'ridiculous_bubble', 'ridiculous_afro',
+      // Custom
+      'fancy_anime',
+      'special_spiky'
     ];
     this.hairColorOptions = ['#2a1a12', '#4b2e20', '#7a4f2f', '#d8c18a', '#e86b3d', '#2d3a8a', '#ff69b4', '#00ff00', '#ff0080', '#ffff00'];
     this.eyeTypeOptions = ['round', 'sharp', 'sleepy', 'big'];
@@ -345,69 +348,6 @@ export class CharacterSelectMenu {
       ctx.fillStyle = '#d13d3d';
       ctx.fillRect(x - radius * 0.75, y - radius * 0.55, radius * 1.5, radius * 0.3);
       ctx.restore();
-    } else if (accessory === 'glasses') {
-      ctx.save();
-      const glassWidth = radius * 0.35;
-      const glassGap = radius * 0.1;
-      
-      // Lenses
-      ctx.fillStyle = '#e8f4f8';
-      ctx.beginPath();
-      ctx.arc(x - glassWidth - glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(x + glassWidth + glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Frame
-      ctx.strokeStyle = '#101010';
-      ctx.lineWidth = Math.max(1.2, radius * 0.08);
-      ctx.beginPath();
-      ctx.arc(x - glassWidth - glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(x + glassWidth + glassGap * 0.5, y - radius * 0.3, glassWidth * 0.5, 0, Math.PI * 2);
-      ctx.stroke();
-      
-      // Bridge
-      ctx.lineWidth = Math.max(1, radius * 0.06);
-      ctx.beginPath();
-      ctx.moveTo(x - glassGap * 0.5, y - radius * 0.3);
-      ctx.lineTo(x + glassGap * 0.5, y - radius * 0.3);
-      ctx.stroke();
-      ctx.restore();
-    } else if (accessory === 'earring') {
-      ctx.save();
-      const earringX = x + radius * 0.7;
-      const earringY = y - radius * 0.1;
-      const earringSize = radius * 0.2;
-      
-      ctx.fillStyle = '#ffd56a';
-      ctx.beginPath();
-      ctx.arc(earringX, earringY, earringSize, 0, Math.PI * 2);
-      ctx.fill();
-      
-      ctx.strokeStyle = '#d4a74a';
-      ctx.lineWidth = Math.max(1, radius * 0.06);
-      ctx.beginPath();
-      ctx.arc(earringX, earringY, earringSize, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
-    } else if (accessory === 'crown') {
-      ctx.save();
-      ctx.fillStyle = '#f2cb33';
-      ctx.beginPath();
-      ctx.moveTo(x - radius * 0.7, y - radius * 0.7);
-      ctx.lineTo(x - radius * 0.35, y - radius * 1.25);
-      ctx.lineTo(x, y - radius * 0.75);
-      ctx.lineTo(x + radius * 0.35, y - radius * 1.25);
-      ctx.lineTo(x + radius * 0.7, y - radius * 0.7);
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = '#c9a022';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.restore();
     } else if (accessory === 'headphones') {
       ctx.save();
       const bandY = y - radius * 0.86;
@@ -496,6 +436,36 @@ export class CharacterSelectMenu {
   }
 
   _drawPreviewFrontFringe(ctx, x, y, radius, hairStyle) {
+    if (hairStyle === 'special_spiky') {
+      const R = radius * 1.45;
+      const baseY = y - radius * 0.12;
+      const spikes = [
+        { x: -0.004639221090756845, y: -0.4974299637649948, w: 0.22, h: 0.5, rot: 180 },
+        { x: 0.14958602287111278, y: -0.46495637175063015, w: 0.22, h: 0.5, rot: 195 },
+        { x: -0.14154045177048424, y: -0.46031727807599776, w: 0.22, h: 0.5, rot: 161 },
+        { x: -0.6321473173406525, y: 0.10565049381953816, w: 0.22, h: 0.5, rot: 161 },
+        { x: 0.6354570957137592, y: 0.11956764742731094, w: 0.22, h: 0.5, rot: 191 }
+      ];
+      for (const s of spikes) {
+        const px = x + s.x * R;
+        const py = baseY + s.y * R;
+        const rot = (s.rot || 0) * Math.PI / 180;
+        const w = Math.max(2.6, s.w * R);
+        const h = Math.max(4, s.h * R);
+        ctx.save();
+        ctx.translate(px, py);
+        if (rot) ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.moveTo(-w * 0.5, h * 0.5);
+        ctx.lineTo(0, -h * 0.5);
+        ctx.lineTo(w * 0.5, h * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      return;
+    }
+
     const style = String(hairStyle || 'none').replace(/^(anime_|female_|medieval_|ridiculous_)/, '');
     const profileMap = {
       ahoge: { count: 2, width: 0.16, depth: 0.44, offset: 0.18 },
@@ -517,7 +487,8 @@ export class CharacterSelectMenu {
       neon: { count: 5, width: 0.12, depth: 0.5, offset: 0.2 },
       worm: { count: 4, width: 0.1, depth: 0.56, offset: 0.18 },
       bubble: { count: 3, width: 0.2, depth: 0.45, offset: 0.22 },
-      afro: { count: 3, width: 0.22, depth: 0.46, offset: 0.2 }
+      afro:     { count: 3, width: 0.22, depth: 0.46, offset: 0.2 },
+      fancy_anime: { count: 2, width: 0.14, depth: 0.7, offset: 0.22 }
     };
     const profile = profileMap[style] || { count: 3, width: 0.18, depth: 0.52, offset: 0.22 };
     const topY = y - radius * 0.96;
@@ -725,6 +696,147 @@ export class CharacterSelectMenu {
         ctx.arc(cx, cy, radius * 0.28, 0, Math.PI * 2);
         ctx.fill();
       }
+    } else if (hairStyle === 'fancy_anime') {
+      const baseColor = ctx.fillStyle || '#4b2e20';
+      const shapes = [
+        {t:'c',x:-0.24,y:-0.09,r:0.6},
+        {t:'c',x:0.25,y:-0.09,r:0.6},
+        {t:'c',x:0,y:-0.48,r:0.46},
+        {t:'s',x:-0.58,y:0.26,w:0.57,h:0.66,rot:-27},
+        {t:'s',x:0.47,y:0.24,w:0.45,h:0.33,rot:101},
+        {t:'s',x:0.46,y:0.36,w:0.24,h:0.66,rot:141},
+        {t:'c',x:-0.01,y:-0.63,r:0.26},
+        {t:'r',x:-0.53,y:0.11,w:0.52,h:1.24,rot:0},
+        {t:'r',x:-0.67,y:0.13,w:0.56,h:1.28,rot:13},
+        {t:'a',x:0.57,y:0.05,w:0.4,h:0.98,rot:-34},
+        {t:'r',x:0.72,y:0.05,w:0.56,h:1.28,rot:-37},
+        {t:'r',x:0.96,y:0.13,w:0.89,h:1.28,rot:-46},
+        {t:'r',x:-0.29,y:-0.16,w:0.18,h:0.9,rot:0},
+        {t:'r',x:-0.28,y:-0.29,w:1.56,h:0.9,rot:0},
+        {t:'r',x:0.63,y:-0.41,w:1.56,h:0.9,rot:-83},
+        {t:'l',x:0.37,y:-0.53,w:0.54,h:0.56},
+        {t:'l',x:0.57,y:-0.35,w:0.54,h:0.56},
+        {t:'l',x:0.61,y:0.05,w:0.54,h:0.56},
+        {t:'l',x:-0.37,y:-0.48,w:0.54,h:0.56},
+        {t:'l',x:-0.57,y:-0.30,w:0.54,h:0.56}
+      ];
+      for (let i = 0; i < shapes.length; i++) {
+        const s = shapes[i];
+        const px = x + s.x * radius;
+        const py = y + s.y * radius;
+        const rot = (s.rot || 0) * Math.PI / 180;
+        ctx.save();
+        ctx.translate(px, py);
+        if (rot) ctx.rotate(rot);
+        if (s.t === 'c') {
+          ctx.beginPath();
+          ctx.arc(0, 0, s.r * radius, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (s.t === 's') {
+          const baseW = Math.max(6, s.w * radius);
+          const h = Math.max(12, s.h * radius);
+          const spikes = 3;
+          const pts = [];
+          pts.push({ x: -baseW * 0.5, y: h * 0.5 });
+          for (let j = 0; j <= spikes; j++) {
+            const t = j / spikes;
+            const xpt = -baseW * 0.5 + t * baseW;
+            const ypt = h * 0.5 - Math.pow(t, 1.2) * h * 1.05;
+            pts.push({ x: xpt, y: ypt });
+          }
+          pts.push({ x: baseW * 0.5, y: h * 0.5 });
+
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let k = 1; k < pts.length; k++) ctx.lineTo(pts[k].x, pts[k].y);
+          ctx.closePath();
+          ctx.fillStyle = baseColor;
+          ctx.fill();
+          ctx.strokeStyle = this._darkenPreviewColor(baseColor, -0.18);
+          ctx.lineWidth = Math.max(1, radius * 0.02);
+          ctx.stroke();
+        } else if (s.t === 'r') {
+          const w = s.w * radius, h = s.h * radius;
+          const grad = ctx.createLinearGradient(-w*0.2, -h/2, w*0.2, h/2);
+          grad.addColorStop(0, this._darkenPreviewColor(baseColor, 0.14));
+          grad.addColorStop(0.6, baseColor);
+          grad.addColorStop(1, this._darkenPreviewColor(baseColor, -0.08));
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.moveTo(-w * 0.4, h * 0.5);
+          ctx.quadraticCurveTo(-w * 0.2, h * 0.1, 0, -h * 0.4);
+          ctx.quadraticCurveTo(w * 0.12, -h * 0.6, w * 0.28, -h * 0.7);
+          ctx.quadraticCurveTo(w * 0.02, -h * 0.5, -w * 0.18, -h * 0.2);
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = 1.0; ctx.stroke();
+        } else if (s.t === 'a') {
+          const w = s.w * radius, h = s.h * radius;
+          ctx.beginPath();
+          ctx.moveTo(-w * 0.45, h * 0.45);
+          ctx.bezierCurveTo(-w * 0.35, h * 0.1, -w * 0.05, -h * 0.05, w * 0.08, -h * 0.5);
+          ctx.bezierCurveTo(w * 0.18, -h * 0.65, w * 0.42, -h * 0.78, w * 0.6, -h * 0.9);
+          ctx.lineTo(w * 0.48, -h * 0.85);
+          ctx.bezierCurveTo(w * 0.28, -h * 0.6, w * 0.06, -h * 0.3, -w * 0.2, h * 0.25);
+          ctx.closePath();
+          ctx.fillStyle = baseColor; ctx.fill();
+          ctx.fillStyle = this._darkenPreviewColor(baseColor, -0.16);
+          ctx.beginPath(); ctx.moveTo(0, -h * 0.2); ctx.quadraticCurveTo(w * 0.22, -h * 0.18, w * 0.26, -h * 0.42); ctx.lineTo(w * 0.18, -h * 0.42); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = this._darkenPreviewColor(baseColor, 0.36); ctx.lineWidth = Math.max(1, radius * 0.008); ctx.beginPath(); ctx.moveTo(-w * 0.18, h * 0.06); ctx.quadraticCurveTo(0, -h * 0.02, w * 0.12, -h * 0.24); ctx.stroke();
+        } else if (s.t === 'l') {
+          const w = s.w * radius, h = s.h * radius;
+          ctx.beginPath();
+          ctx.moveTo(0, -h / 2);
+          ctx.quadraticCurveTo(w * 0.6, -h * 0.08, 0, h / 2);
+          ctx.quadraticCurveTo(-w * 0.6, -h * 0.08, 0, -h / 2);
+          ctx.closePath(); ctx.fillStyle = baseColor; ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.28)'; ctx.lineWidth = Math.max(1, radius * 0.006 * 0.2); ctx.beginPath(); ctx.moveTo(0, -h / 2 + 2); ctx.lineTo(0, h / 2 - 2); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    } else if (hairStyle === 'special_spiky') {
+      // Layer 1 only: behind circles + top spikes. Front spikes are drawn by _drawPreviewFrontFringe.
+      const baseColor = ctx.fillStyle || '#4b2e20';
+      const R = radius * 1.32;
+      const baseY = y - radius * 0.18;
+
+      // behind face circles
+      const behind = [
+        { x: 0, y: -0.38093333136806706, r: 0.5800000000000003 },
+        { x: 0.4186529463352946, y: -0.1907310640806984, r: 0.5800000000000003 },
+        { x: -0.36421592882384424, y: -0.1814528767314336, r: 0.5800000000000003 }
+      ];
+      for (const b of behind) {
+        const px = x + b.x * R;
+        const py = baseY + b.y * R;
+        ctx.save();
+        ctx.fillStyle = baseColor;
+        ctx.beginPath(); ctx.arc(px, py, Math.max(2.8, b.r * R), 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+
+      // hair1 triangles (spikes)
+      const h1 = [
+        { x: -0.009277932517015934, y: -1.0025700043809742, w: 0.17, h: 0.17, rot: 0 },
+        { x: 0.2423678963637609, y: -0.960818288725407, w: 0.17, h: 0.17, rot: 22 },
+        { x: 0.5311264746415971, y: -0.7845333024619355, w: 0.17, h: 0.17, rot: 22 },
+        { x: 0.7874117794453797, y: -0.6546390618206014, w: 0.17, h: 0.17, rot: 39 },
+        { x: -0.2632916577615537, y: -0.9515401332301733, w: 0.17, h: 0.17, rot: -26 },
+        { x: -0.5173056378383403, y: -0.7706160532920694, w: 0.17, h: 0.17, rot: -26 },
+        { x: -0.7898757377814076, y: -0.6360827189761029, w: 0.17, h: 0.17, rot: -45 },
+        { x: -0.700500978795378, y: -0.7613379296508668, w: 0.18, h: 0.35, rot: -37 },
+        { x: 0.7294715854550436, y: -0.7938114579571692, w: 0.18, h: 0.35, rot: 30 }
+      ];
+      for (const s of h1) {
+        const px = x + s.x * R;
+        const py = baseY + s.y * R;
+        const rot = (s.rot || 0) * Math.PI / 180;
+        const w = Math.max(2.5, s.w * R);
+        const h = Math.max(2.5, s.h * R);
+        ctx.save(); ctx.translate(px, py); if (rot) ctx.rotate(rot);
+        ctx.fillStyle = baseColor; ctx.beginPath(); ctx.moveTo(0, -h / 2); ctx.lineTo(-w / 2, h / 2); ctx.lineTo(w / 2, h / 2); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+
     } else {
       // Default fallback
       ctx.beginPath();
